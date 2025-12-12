@@ -133,106 +133,29 @@ namespace ssdf {
         return dx * dx + dy * dy + dz * dz;
     }
 
-    template <typename T, typename I>
-    inline static bool chunk_aabb_can_improve(const T px,
-                                              const T py,
-                                              const T pz,
-                                              const T best_dist_sq,
-                                              const ptrdiff_t chunk_start,
-                                              const I *const SSDF_RESTRICT sort_idx,
-                                              const T *const SSDF_RESTRICT surf_minx,
-                                              const T *const SSDF_RESTRICT surf_maxx,
-                                              const T *const SSDF_RESTRICT surf_miny,
-                                              const T *const SSDF_RESTRICT surf_maxy,
-                                              const T *const SSDF_RESTRICT surf_minz,
-                                              const T *const SSDF_RESTRICT surf_maxz,
-                                              int *const SSDF_RESTRICT canit) {
-        bool any = false;
-#pragma omp simd reduction(| : any)
-        for (ptrdiff_t lane = 0; lane < VECTOR_SIZE; ++lane) {
-            const ptrdiff_t i = chunk_start + lane;
-            const I orig_idx = sort_idx[i];
-
-            const T dx = (px < surf_minx[orig_idx]) ? (surf_minx[orig_idx] - px)
-                                                    : ((px > surf_maxx[orig_idx]) ? (px - surf_maxx[orig_idx]) : T(0));
-            const T dy = (py < surf_miny[orig_idx]) ? (surf_miny[orig_idx] - py)
-                                                    : ((py > surf_maxy[orig_idx]) ? (py - surf_maxy[orig_idx]) : T(0));
-            const T dz = (pz < surf_minz[orig_idx]) ? (surf_minz[orig_idx] - pz)
-                                                    : ((pz > surf_maxz[orig_idx]) ? (pz - surf_maxz[orig_idx]) : T(0));
-            const T dist_sq = dx * dx + dy * dy + dz * dz;
-            canit[lane] = (dist_sq < best_dist_sq);
-            any = any || canit[lane];
-        }
-        return any;
-    }
-
     // Conservative AABB check for a single element
-    template <typename T, typename I>
+    template <typename T>
     inline static bool aabb_can_improve(const T px,
                                         const T py,
                                         const T pz,
                                         const T best_dist_sq,
-                                        const I orig_idx,
-                                        const T *const SSDF_RESTRICT surf_minx,
-                                        const T *const SSDF_RESTRICT surf_maxx,
-                                        const T *const SSDF_RESTRICT surf_miny,
-                                        const T *const SSDF_RESTRICT surf_maxy,
-                                        const T *const SSDF_RESTRICT surf_minz,
-                                        const T *const SSDF_RESTRICT surf_maxz) {
-        const T dx = (px < surf_minx[orig_idx]) ? (surf_minx[orig_idx] - px)
-                                                : ((px > surf_maxx[orig_idx]) ? (px - surf_maxx[orig_idx]) : T(0));
-        const T dy = (py < surf_miny[orig_idx]) ? (surf_miny[orig_idx] - py)
-                                                : ((py > surf_maxy[orig_idx]) ? (py - surf_maxy[orig_idx]) : T(0));
-        const T dz = (pz < surf_minz[orig_idx]) ? (surf_minz[orig_idx] - pz)
-                                                : ((pz > surf_maxz[orig_idx]) ? (pz - surf_maxz[orig_idx]) : T(0));
-        const T dist_sq = dx * dx + dy * dy + dz * dz;
+                                        const T minx,
+                                        const T maxx,
+                                        const T miny,
+                                        const T maxy,
+                                        const T minz,
+                                        const T maxz) {
+        const T dxmin = px - minx;
+        const T dxmax = px - maxx;
+        const T dymin = py - miny;
+        const T dymax = py - maxy;
+        const T dzmin = pz - minz;
+        const T dzmax = pz - maxz;
+        const T dx = MIN(dxmin * dxmin, dxmax * dxmax);
+        const T dy = MIN(dymin * dymin, dymax * dymax);
+        const T dz = MIN(dzmin * dzmin, dzmax * dzmax);
+        const T dist_sq = dx + dy + dz;
         return dist_sq < best_dist_sq;
-    }
-
-    // Helper function to compute point-to-triangle distance for a fixed-size chunk
-    // Uses fixed-size loop to enable compiler vectorization
-    template <typename G, typename T, typename I>
-    inline static T compute_triangle_dist_chunk(const G px,
-                                         const G py,
-                                         const G pz,
-                                         const ptrdiff_t chunk_start,
-                                         const I *const SSDF_RESTRICT sort_idx,
-                                         const I *const SSDF_RESTRICT s0,
-                                         const I *const SSDF_RESTRICT s1,
-                                         const I *const SSDF_RESTRICT s2,
-                                         const G *const SSDF_RESTRICT sx,
-                                         const G *const SSDF_RESTRICT sy,
-                                         const G *const SSDF_RESTRICT sz) {
-        T dist[VECTOR_SIZE];
-
-// Fixed-size loop (VECTOR_SIZE) for compiler vectorization
-#pragma omp simd
-        for (ptrdiff_t lane = 0; lane < VECTOR_SIZE; ++lane) {
-            const ptrdiff_t i = chunk_start + lane;
-            const I orig_idx = sort_idx[i];
-            const I i0 = s0[orig_idx], i1 = s1[orig_idx], i2 = s2[orig_idx];
-
-            const G tx0 = sx[i0], tx1 = sx[i1], tx2 = sx[i2];
-            const G ty0 = sy[i0], ty1 = sy[i1], ty2 = sy[i2];
-            const G tz0 = sz[i0], tz1 = sz[i1], tz2 = sz[i2];
-
-            // Compute minimum distance to triangle vertices
-            // const T dx = std::min({std::abs(px - tx0), std::abs(px - tx1), std::abs(px - tx2)});
-            // const T dy = std::min({std::abs(py - ty0), std::abs(py - ty1), std::abs(py - ty2)});
-            // const T dz = std::min({std::abs(pz - tz0), std::abs(pz - tz1), std::abs(pz - tz2)});
-            // dist[lane] = std::sqrt(dx * dx + dy * dy + dz * dz);
-            dist[lane] = point_triangle_dist_sq(px, py, pz, tx0, ty0, tz0, tx1, ty1, tz1, tx2, ty2, tz2);
-        }
-
-        T best_dist = std::numeric_limits<T>::max();
-
-#pragma omp simd reduction(min : best_dist)
-        for (ptrdiff_t lane = 0; lane < VECTOR_SIZE; ++lane) {
-            T dist_sqrt = dist[lane];
-            best_dist = MIN(best_dist, dist_sqrt);
-        }
-
-        return best_dist;
     }
 
     struct Timer {
@@ -341,6 +264,7 @@ namespace ssdf {
                 for (ptrdiff_t i = 0; i < nselements; i++) {
                     surf_min[i] = scratch[sort_idx[i]];
                 }
+
                 memcpy(scratch, surf_max, sizeof(T) * nselements);
                 for (ptrdiff_t i = 0; i < nselements; i++) {
                     surf_max[i] = scratch[sort_idx[i]];
@@ -373,51 +297,28 @@ namespace ssdf {
                     ptrdiff_t start = (left > 0 ? left - 1 : 0);
                     ptrdiff_t i = start;
 
-                    // Process in chunks of VECTOR_SIZE for vectorization
-                    // while (i >= VECTOR_SIZE - 1) {
-                    //     // Early termination check for the chunk
-                    //     if (cum_max[i - (VECTOR_SIZE - 1)] < pcoord - best_dist) break;
-
-                    //     // Process chunk of VECTOR_SIZE elements
-                    //     ptrdiff_t chunk_start = i - (VECTOR_SIZE - 1);
-                    //     ptrdiff_t chunk_end = i + 1;
-
-                    //     // Filter elements that can be skipped
-                    //     bool process_chunk = false;
-                    //     for (ptrdiff_t j = chunk_start; j < chunk_end; ++j) {
-                    //         if (surf_max[j] >= pcoord - best_dist) {
-                    //             process_chunk = true;
-                    //             break;
-                    //         }
-                    //     }
-
-                    //     if (process_chunk) {
-                    //         T chunk_best = compute_triangle_dist_chunk<G, T, I>(
-                    //             px, py, pz, chunk_start, sort_idx, s0, s1, s2, sx, sy, sz);
-                    //         best_dist = std::min(best_dist, std::sqrt(chunk_best));
-                    //     }
-
-                    //     i -= VECTOR_SIZE;
-                    // }
-
-                    // Handle remainder (scalar)
                     for (; i >= 0; i--) {
                         if (cum_max[i] < pcoord - best_dist) break;
                         if (surf_max[i] < pcoord - best_dist) continue;
-
-                        // if (!aabb_can_improve(px, py, pz, best_dist * best_dist,
-                        //                       sort_idx[i],
-                        //                       surf_minx, surf_maxx,
-                        //                       surf_miny, surf_maxy,
-                        //                       surf_minz, surf_maxz)) {
-                        //     continue;
-                        // }
 
                         const I orig_idx = sort_idx[i];
                         const I i0 = s0[orig_idx], i1 = s1[orig_idx], i2 = s2[orig_idx];
                         const G tx0 = sx[i0], tx1 = sx[i1], tx2 = sx[i2];
                         const G ty0 = sy[i0], ty1 = sy[i1], ty2 = sy[i2];
                         const G tz0 = sz[i0], tz1 = sz[i1], tz2 = sz[i2];
+
+                        if (!aabb_can_improve<T>(px,
+                                                 py,
+                                                 pz,
+                                                 best_dist * best_dist,
+                                                 std::min({tx0, tx1, tx2}),
+                                                 std::max({tx0, tx1, tx2}),
+                                                 std::min({ty0, ty1, ty2}),
+                                                 std::max({ty0, ty1, ty2}),
+                                                 std::min({tz0, tz1, tz2}),
+                                                 std::max({tz0, tz1, tz2}))) {
+                            continue;
+                        }
 
                         const T dist = point_triangle_dist_sq(px, py, pz, tx0, ty0, tz0, tx1, ty1, tz1, tx2, ty2, tz2);
                         best_dist = std::min(best_dist, std::sqrt(dist));
@@ -428,37 +329,29 @@ namespace ssdf {
                 {
                     ptrdiff_t i = left;
                     ptrdiff_t end = nselements;
-
-                    // Process in chunks of VECTOR_SIZE for vectorization
-                    // while (i + VECTOR_SIZE <= end) {
-                    //     // Early termination check
-                    //     if (surf_min[i + VECTOR_SIZE - 1] > pcoord + best_dist) break;
-
-                    //     // Process chunk of VECTOR_SIZE elements
-                    //     T chunk_best =
-                    //         compute_triangle_dist_chunk<G, T, I>(px, py, pz, i, sort_idx, s0, s1, s2, sx, sy, sz);
-                    //     best_dist = std::min(best_dist, std::sqrt(chunk_best));
-
-                    //     i += VECTOR_SIZE;
-                    // }
-
                     // Handle remainder (scalar)
                     for (; i < end; i++) {
                         if (surf_min[i] > pcoord + best_dist) break;
 
-						// if (!aabb_can_improve(px, py, pz, best_dist * best_dist,
-                        //                       sort_idx[i],
-                        //                       surf_minx, surf_maxx,
-                        //                       surf_miny, surf_maxy,
-                        //                       surf_minz, surf_maxz)) {
-                        //     continue;
-                        // }
-
                         const I orig_idx = sort_idx[i];
+
                         const I i0 = s0[orig_idx], i1 = s1[orig_idx], i2 = s2[orig_idx];
                         const G tx0 = sx[i0], tx1 = sx[i1], tx2 = sx[i2];
                         const G ty0 = sy[i0], ty1 = sy[i1], ty2 = sy[i2];
                         const G tz0 = sz[i0], tz1 = sz[i1], tz2 = sz[i2];
+
+                        if (!aabb_can_improve<T>(px,
+                                                 py,
+                                                 pz,
+                                                 best_dist * best_dist,
+                                                 std::min({tx0, tx1, tx2}),
+                                                 std::max({tx0, tx1, tx2}),
+                                                 std::min({ty0, ty1, ty2}),
+                                                 std::max({ty0, ty1, ty2}),
+                                                 std::min({tz0, tz1, tz2}),
+                                                 std::max({tz0, tz1, tz2}))) {
+                            continue;
+                        }
 
                         const T dist = point_triangle_dist_sq(px, py, pz, tx0, ty0, tz0, tx1, ty1, tz1, tx2, ty2, tz2);
                         best_dist = std::min(best_dist, std::sqrt(dist));
