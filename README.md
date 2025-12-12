@@ -94,9 +94,6 @@ Cite SSDF if you use it for your work:
 
 - API: `ssdf::pedf<G,T,I>(comm, lnpoints, x, y, z, lnselements, s0, s1, s2, lnspoints, sx, sy, sz, out, use_allgather=true)`.
 - Data distribution: points and surface are partitioned across ranks.
-- Modes:
-  - `use_allgather=true`: gather surface on all ranks, then compute locally.
-  - `use_allgather=false`: broadcast surface chunks in rounds and take the minimum.
 - Binary driver: `psdf_exe <surf_folder> <points_folder> <output_file>`
   - Reads SoA `x.raw,y.raw,z.raw` and `i0.raw,i1.raw,i2.raw` via `MPI_File_read_at_all`
   - Writes distributed output with `MPI_File_write_at_all`
