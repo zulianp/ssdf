@@ -18,18 +18,6 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 
-# Check for sccd submodule
-set(SCCD_DIR "${CMAKE_CURRENT_SOURCE_DIR}/external/sccd")
-if(NOT EXISTS "${SCCD_DIR}/CMakeLists.txt")
-    message(FATAL_ERROR
-        "sccd submodule not found at ${SCCD_DIR}.\n"
-        "Please run: git submodule update --init --recursive"
-    )
-endif()
-
-# Add sccd subdirectory
-add_subdirectory(${SCCD_DIR} sccd_build)
-
 # Optional dependencies
 if(SSDF_ENABLE_MPI)
     find_package(MPI REQUIRED)
@@ -81,9 +69,6 @@ set_target_properties(ssdf PROPERTIES
 )
 
 # Link dependencies
-# Link to sccd (assuming it exports a target named 'sccd')
-# If the target name is different, adjust accordingly
-target_link_libraries(ssdf PUBLIC sccd)
 
 # Add optional dependencies
 if(SSDF_ENABLE_MPI)
@@ -139,15 +124,6 @@ configure_package_config_file(
     "${CMAKE_CURRENT_SOURCE_DIR}/cmake/ssdfConfig.cmake.in"
     "${CMAKE_CURRENT_BINARY_DIR}/ssdfConfig.cmake"
     INSTALL_DESTINATION lib/cmake/ssdf
-)
-
-# Install sccd export set (required for ssdf export)
-# This must be installed to satisfy the export dependency
-install(EXPORT SCCD_TARGETS
-    FILE sccdTargets.cmake
-    NAMESPACE sccd::
-    DESTINATION lib/cmake/ssdf
-    EXPORT_LINK_INTERFACE_LIBRARIES
 )
 
 install(EXPORT ssdfTargets

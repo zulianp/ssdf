@@ -29,7 +29,7 @@ int main() {
     T out[5] = {0.0f};
 
     // Call sdf function
-    int result = ssdf::sdf(npoints, x, y, z, nselements, s0, s1, s2, nspoints, sx, sy, sz, out);
+    int result = ssdf::edf(npoints, x, y, z, nselements, s0, s1, s2, nspoints, sx, sy, sz, out);
 
     assert(result == 0);
 

@@ -6,26 +6,20 @@
 
 - CMake 3.15 or higher
 - C++17 compatible compiler
-- Git (for submodule management)
-
-### Mandatory Dependencies
-
-- **sccd**: Automatically included as a git submodule
 
 ### Optional Dependencies
 
-- **MPI**: For distributed memory parallelization
 - **OpenMP**: For shared memory parallelization
-- **CUDA**: For GPU acceleration
-- **HIP**: For AMD GPU acceleration
+- **MPI**: For distributed memory parallelization (TODO
+- **CUDA**: For GPU acceleration (TODO)
+- **HIP**: For AMD GPU acceleration (TODO)
 
 ### Building the Project
 
-1. **Clone the repository and initialize submodules:**
+1. **Clone the repository:**
    ```bash
    git clone https://github.com/zulianp/ssdf.git
    cd ssdf
-   git submodule update --init --recursive
    ```
 
 2. **Create a build directory:**
@@ -70,5 +64,3 @@ After installation, you can use ssdf in your CMake project:
 find_package(ssdf REQUIRED)
 target_link_libraries(your_target PRIVATE ssdf::ssdf)
 ```
-
-The package will automatically handle the sccd dependency.
