@@ -62,19 +62,22 @@ set(SSDF_SOURCES
     ssdf.cpp
 )
 
-set(SSDF_HEADERS
-    ssdf.hpp
-    cell_list.hpp
-)
+# Collect header files (only include existing files)
+set(SSDF_HEADERS "")
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/ssdf.hpp")
+    list(APPEND SSDF_HEADERS "${CMAKE_CURRENT_SOURCE_DIR}/ssdf.hpp")
+endif()
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/cell_list.hpp")
+    list(APPEND SSDF_HEADERS "${CMAKE_CURRENT_SOURCE_DIR}/cell_list.hpp")
+endif()
 
-# Create library target
-add_library(ssdf ${SSDF_SOURCES} ${SSDF_HEADERS})
+# Create library target (headers are for installation only, not compilation)
+add_library(ssdf ${SSDF_SOURCES})
 
 # Set target properties
 set_target_properties(ssdf PROPERTIES
     VERSION ${PROJECT_VERSION}
     SOVERSION ${PROJECT_VERSION_MAJOR}
-    PUBLIC_HEADER "${SSDF_HEADERS}"
 )
 
 # Link dependencies
@@ -117,7 +120,6 @@ install(TARGETS ssdf
     LIBRARY DESTINATION lib
     ARCHIVE DESTINATION lib
     RUNTIME DESTINATION bin
-    PUBLIC_HEADER DESTINATION include/ssdf
 )
 
 # Install headers
@@ -139,10 +141,20 @@ configure_package_config_file(
     INSTALL_DESTINATION lib/cmake/ssdf
 )
 
+# Install sccd export set (required for ssdf export)
+# This must be installed to satisfy the export dependency
+install(EXPORT SCCD_TARGETS
+    FILE sccdTargets.cmake
+    NAMESPACE sccd::
+    DESTINATION lib/cmake/ssdf
+    EXPORT_LINK_INTERFACE_LIBRARIES
+)
+
 install(EXPORT ssdfTargets
     FILE ssdfTargets.cmake
     NAMESPACE ssdf::
     DESTINATION lib/cmake/ssdf
+    EXPORT_LINK_INTERFACE_LIBRARIES
 )
 
 install(FILES
@@ -151,3 +163,16 @@ install(FILES
     DESTINATION lib/cmake/ssdf
 )
 
+# Testing
+enable_testing()
+
+# Test executable
+add_executable(ssdf_test tests/ssdf_test.cpp)
+target_link_libraries(ssdf_test PRIVATE ssdf)
+
+# Add test to CTest
+add_test(NAME ssdf_basic_test COMMAND ssdf_test)
+
+# SDF executable
+add_executable(sdf_exe sdf.exe.cpp)
+target_link_libraries(sdf_exe PRIVATE ssdf)
