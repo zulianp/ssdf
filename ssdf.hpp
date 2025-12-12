@@ -12,6 +12,8 @@
 
 #define SSDF_RESTRICT __restrict
 
+#define VECTOR_SIZE 16
+
 namespace ssdf {
 
 // Return current time in milliseconds
@@ -19,6 +21,42 @@ inline double time_ms() {
   auto now = std::chrono::high_resolution_clock::now();
   auto duration = now.time_since_epoch();
   return std::chrono::duration<double, std::milli>(duration).count();
+}
+
+// Helper function to compute point-to-triangle distance for a fixed-size chunk
+// Uses fixed-size loop to enable compiler vectorization
+template <typename G, typename T, typename I>
+inline T compute_triangle_dist_chunk(const G px, const G py, const G pz,
+                                     const ptrdiff_t chunk_start,
+                                     const I *const SSDF_RESTRICT sort_idx,
+                                     const I *const SSDF_RESTRICT s0,
+                                     const I *const SSDF_RESTRICT s1,
+                                     const I *const SSDF_RESTRICT s2,
+                                     const G *const SSDF_RESTRICT sx,
+                                     const G *const SSDF_RESTRICT sy,
+                                     const G *const SSDF_RESTRICT sz) {
+  T best_dist = std::numeric_limits<T>::max();
+
+  // Fixed-size loop (VECTOR_SIZE) for compiler vectorization
+  #pragma omp simd reduction(min:best_dist)
+  for (ptrdiff_t lane = 0; lane < VECTOR_SIZE; ++lane) {
+    const ptrdiff_t i = chunk_start + lane;
+    const I orig_idx = sort_idx[i];
+    const I i0 = s0[orig_idx], i1 = s1[orig_idx], i2 = s2[orig_idx];
+    
+    const G tx0 = sx[i0], tx1 = sx[i1], tx2 = sx[i2];
+    const G ty0 = sy[i0], ty1 = sy[i1], ty2 = sy[i2];
+    const G tz0 = sz[i0], tz1 = sz[i1], tz2 = sz[i2];
+
+    // Compute minimum distance to triangle vertices
+    const T dx = std::min({std::abs(px - tx0), std::abs(px - tx1), std::abs(px - tx2)});
+    const T dy = std::min({std::abs(py - ty0), std::abs(py - ty1), std::abs(py - ty2)});
+    const T dz = std::min({std::abs(pz - tz0), std::abs(pz - tz1), std::abs(pz - tz2)});
+    const T dist = std::sqrt(dx * dx + dy * dy + dz * dz);
+    best_dist = std::min(best_dist, dist);
+  }
+
+  return best_dist;
 }
 
 struct Timer {
@@ -88,11 +126,6 @@ int sdf(const ptrdiff_t npoints, const G *const SSDF_RESTRICT x,
     }
   }
 
-  // Initialize output with large distances
-  for (ptrdiff_t i = 0; i < npoints; i++) {
-    out[i] = std::numeric_limits<T>::max();
-  }
-
   // Process each dimension
   for (int dim = 0; dim < 3; dim++) {
     Timer t_dim("Process dimension " + std::to_string(dim));
@@ -141,49 +174,96 @@ int sdf(const ptrdiff_t npoints, const G *const SSDF_RESTRICT x,
       ptrdiff_t left =
           std::lower_bound(surf_min, surf_min + nselements, pcoord) - surf_min;
 
-      // Check elements to the left
-      for (ptrdiff_t i = (left > 0 ? left - 1 : 0); i >= 0; i--) {
-        if (cum_max[i] < pcoord - best_dist)
-          break;
-        if (surf_max[i] < pcoord - best_dist)
-          continue;
+      // Check elements to the left (vectorized)
+      {
+        ptrdiff_t start = (left > 0 ? left - 1 : 0);
+        ptrdiff_t i = start;
+        
+        // Process in chunks of VECTOR_SIZE for vectorization
+        while (i >= VECTOR_SIZE - 1) {
+          // Early termination check for the chunk
+          if (cum_max[i - (VECTOR_SIZE - 1)] < pcoord - best_dist)
+            break;
+          
+          // Process chunk of VECTOR_SIZE elements
+          ptrdiff_t chunk_start = i - (VECTOR_SIZE - 1);
+          ptrdiff_t chunk_end = i + 1;
+          
+          // Filter elements that can be skipped
+          bool process_chunk = false;
+          for (ptrdiff_t j = chunk_start; j < chunk_end; ++j) {
+            if (surf_max[j] >= pcoord - best_dist) {
+              process_chunk = true;
+              break;
+            }
+          }
+          
+          if (process_chunk) {
+            T chunk_best = compute_triangle_dist_chunk<G, T, I>(
+                px, py, pz, chunk_start, sort_idx, s0, s1, s2, sx, sy, sz);
+            best_dist = std::min(best_dist, chunk_best);
+          }
+          
+          i -= VECTOR_SIZE;
+        }
+        
+        // Handle remainder (scalar)
+        for (; i >= 0; i--) {
+          if (cum_max[i] < pcoord - best_dist)
+            break;
+          if (surf_max[i] < pcoord - best_dist)
+            continue;
 
-        const I orig_idx = sort_idx[i];
-        const I i0 = s0[orig_idx], i1 = s1[orig_idx], i2 = s2[orig_idx];
-        const G tx0 = sx[i0], tx1 = sx[i1], tx2 = sx[i2];
-        const G ty0 = sy[i0], ty1 = sy[i1], ty2 = sy[i2];
-        const G tz0 = sz[i0], tz1 = sz[i1], tz2 = sz[i2];
+          const I orig_idx = sort_idx[i];
+          const I i0 = s0[orig_idx], i1 = s1[orig_idx], i2 = s2[orig_idx];
+          const G tx0 = sx[i0], tx1 = sx[i1], tx2 = sx[i2];
+          const G ty0 = sy[i0], ty1 = sy[i1], ty2 = sy[i2];
+          const G tz0 = sz[i0], tz1 = sz[i1], tz2 = sz[i2];
 
-        // Simple point-to-triangle distance approximation
-        const T dx = std::min(
-            {std::abs(px - tx0), std::abs(px - tx1), std::abs(px - tx2)});
-        const T dy = std::min(
-            {std::abs(py - ty0), std::abs(py - ty1), std::abs(py - ty2)});
-        const T dz = std::min(
-            {std::abs(pz - tz0), std::abs(pz - tz1), std::abs(pz - tz2)});
-        const T dist = std::sqrt(dx * dx + dy * dy + dz * dz);
-        best_dist = std::min(best_dist, dist);
+          const T dx = std::min({std::abs(px - tx0), std::abs(px - tx1), std::abs(px - tx2)});
+          const T dy = std::min({std::abs(py - ty0), std::abs(py - ty1), std::abs(py - ty2)});
+          const T dz = std::min({std::abs(pz - tz0), std::abs(pz - tz1), std::abs(pz - tz2)});
+          const T dist = std::sqrt(dx * dx + dy * dy + dz * dz);
+          best_dist = std::min(best_dist, dist);
+        }
       }
 
-      // Check elements to the right
-      for (ptrdiff_t i = left; i < nselements; i++) {
-        if (surf_min[i] > pcoord + best_dist)
-          break;
+      // Check elements to the right (vectorized)
+      {
+        ptrdiff_t i = left;
+        ptrdiff_t end = nselements;
+        
+        // Process in chunks of VECTOR_SIZE for vectorization
+        while (i + VECTOR_SIZE <= end) {
+          // Early termination check
+          if (surf_min[i + VECTOR_SIZE - 1] > pcoord + best_dist)
+            break;
+          
+          // Process chunk of VECTOR_SIZE elements
+          T chunk_best = compute_triangle_dist_chunk<G, T, I>(
+              px, py, pz, i, sort_idx, s0, s1, s2, sx, sy, sz);
+          best_dist = std::min(best_dist, chunk_best);
+          
+          i += VECTOR_SIZE;
+        }
+        
+        // Handle remainder (scalar)
+        for (; i < end; i++) {
+          if (surf_min[i] > pcoord + best_dist)
+            break;
 
-        const I orig_idx = sort_idx[i];
-        const I i0 = s0[orig_idx], i1 = s1[orig_idx], i2 = s2[orig_idx];
-        const G tx0 = sx[i0], tx1 = sx[i1], tx2 = sx[i2];
-        const G ty0 = sy[i0], ty1 = sy[i1], ty2 = sy[i2];
-        const G tz0 = sz[i0], tz1 = sz[i1], tz2 = sz[i2];
+          const I orig_idx = sort_idx[i];
+          const I i0 = s0[orig_idx], i1 = s1[orig_idx], i2 = s2[orig_idx];
+          const G tx0 = sx[i0], tx1 = sx[i1], tx2 = sx[i2];
+          const G ty0 = sy[i0], ty1 = sy[i1], ty2 = sy[i2];
+          const G tz0 = sz[i0], tz1 = sz[i1], tz2 = sz[i2];
 
-        const T dx = std::min(
-            {std::abs(px - tx0), std::abs(px - tx1), std::abs(px - tx2)});
-        const T dy = std::min(
-            {std::abs(py - ty0), std::abs(py - ty1), std::abs(py - ty2)});
-        const T dz = std::min(
-            {std::abs(pz - tz0), std::abs(pz - tz1), std::abs(pz - tz2)});
-        const T dist = std::sqrt(dx * dx + dy * dy + dz * dz);
-        best_dist = std::min(best_dist, dist);
+          const T dx = std::min({std::abs(px - tx0), std::abs(px - tx1), std::abs(px - tx2)});
+          const T dy = std::min({std::abs(py - ty0), std::abs(py - ty1), std::abs(py - ty2)});
+          const T dz = std::min({std::abs(pz - tz0), std::abs(pz - tz1), std::abs(pz - tz2)});
+          const T dist = std::sqrt(dx * dx + dy * dy + dz * dz);
+          best_dist = std::min(best_dist, dist);
+        }
       }
 
       out[p] = best_dist;

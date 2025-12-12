@@ -221,6 +221,12 @@ int main(int argc, char* argv[]) {
     // Allocate output array
     T* out = new T[npoints];
 
+
+    // Initialize output with large distances
+    for (ptrdiff_t i = 0; i < npoints; i++) {
+      out[i] = std::numeric_limits<T>::max();
+    }
+
     // Compute SDF
     int result = ssdf::sdf(npoints, x, y, z, nselements, s0, s1, s2, nspoints, sx, sy, sz, out);
 
