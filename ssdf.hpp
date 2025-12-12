@@ -28,8 +28,9 @@
 #endif
 #endif
 
-#define VECTOR_SIZE 16
+#define VECTOR_SIZE 32
 
+#define MIN(a, b) ((a) < (b) ? (a) : (b))
 namespace ssdf {
 
     // Return current time in milliseconds
@@ -53,10 +54,10 @@ namespace ssdf {
                                          const G *const SSDF_RESTRICT sx,
                                          const G *const SSDF_RESTRICT sy,
                                          const G *const SSDF_RESTRICT sz) {
-        T best_dist = std::numeric_limits<T>::max();
+        T dist[VECTOR_SIZE];
 
 // Fixed-size loop (VECTOR_SIZE) for compiler vectorization
-#pragma omp simd reduction(min : best_dist)
+#pragma omp simd
         for (ptrdiff_t lane = 0; lane < VECTOR_SIZE; ++lane) {
             const ptrdiff_t i = chunk_start + lane;
             const I orig_idx = sort_idx[i];
@@ -70,8 +71,14 @@ namespace ssdf {
             const T dx = std::min({std::abs(px - tx0), std::abs(px - tx1), std::abs(px - tx2)});
             const T dy = std::min({std::abs(py - ty0), std::abs(py - ty1), std::abs(py - ty2)});
             const T dz = std::min({std::abs(pz - tz0), std::abs(pz - tz1), std::abs(pz - tz2)});
-            const T dist = std::sqrt(dx * dx + dy * dy + dz * dz);
-            best_dist = std::min(best_dist, dist);
+            dist[lane] = std::sqrt(dx * dx + dy * dy + dz * dz);
+        }
+
+        T best_dist = std::numeric_limits<T>::max();
+
+#pragma omp simd reduction(min : best_dist)
+        for (ptrdiff_t lane = 0; lane < VECTOR_SIZE; ++lane) {
+            best_dist = MIN(best_dist, dist[lane]);
         }
 
         return best_dist;
@@ -165,10 +172,15 @@ namespace ssdf {
                     surf_max[i] = scratch[sort_idx[i]];
                 }
 
-                // Compute cumulative max
-                cum_max[0] = surf_max[0];
-                for (ptrdiff_t i = 1; i < nselements; i++) {
-                    cum_max[i] = std::max(cum_max[i - 1], surf_max[i]);
+                {
+                    T acc = surf_max[0];
+#pragma omp parallel for reduction(inscan, max : acc)
+                    for (ptrdiff_t i = 0; i < nselements; i++) {
+                        acc = std::max(acc, surf_max[i]);
+
+#pragma omp scan inclusive(acc)
+                        cum_max[i] = acc;
+                    }
                 }
             }
 
