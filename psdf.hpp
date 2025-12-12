@@ -5,7 +5,33 @@
 #include <vector>
 #include "ssdf.hpp"
 
+#define PSDF_TIMER(name) ssdf::Timer t_##name(#name);
+
 namespace ssdf {
+    /**
+     * @brief Distributed unsigned point-to-surface distances with MPI.
+     *
+     * @tparam G Geometry type (float/double) for coordinates.
+     * @tparam T Output distance type.
+     * @tparam I Index type for triangle vertices.
+     * @param comm MPI communicator.
+     * @param lnpoints Local number of query points on this rank.
+     * @param x,y,z Local point coordinates (SoA), size lnpoints.
+     * @param lnselements Local number of surface triangles.
+     * @param s0,s1,s2 Local triangle indices (size lnselements), referencing local surface vertices.
+     * @param lnspoints Local number of surface vertices.
+     * @param sx,sy,sz Local surface vertex coordinates (SoA), size lnspoints.
+     * @param out Output array of size lnpoints. On input, values are treated as current best
+     *            distances (initialize to large values if unused).
+     * @param use_allgather If true, gather full surface on all ranks; otherwise broadcast surface
+     *                      chunks in rounds and take elementwise minima.
+     * @return int 0 on success.
+     *
+     * Notes:
+     * - Distances are unsigned (closest-point Euclidean distance).
+     * - Data distribution is contiguous partitions of points and surface across ranks.
+     * - OpenMP may parallelize local computation if enabled at build time.
+     */
     template <typename G, typename T, typename I>
     int pedf(MPI_Comm comm,
              const ptrdiff_t lnpoints,
@@ -23,7 +49,7 @@ namespace ssdf {
              T *const SSDF_RESTRICT out,
             const bool use_allgather = true) 
              {
-
+                PSDF_TIMER(total);
                 int comm_size = 0, comm_rank = 0;
                 MPI_Comm_size(comm, &comm_size);
                 MPI_Comm_rank(comm, &comm_rank);
@@ -122,6 +148,8 @@ namespace ssdf {
                     std::vector<I> s0_buf(max_selems), s1_buf(max_selems), s2_buf(max_selems);
 
                     for (int root = 0; root < comm_size; ++root) {
+                        PSDF_TIMER(round);
+
                         long long nsp_root = 0, nse_root = 0;
                         if (comm_rank == root) {
                             nsp_root = lnspoints;

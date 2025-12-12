@@ -216,19 +216,38 @@ namespace ssdf {
         double start_time;
         double end_time;
         double duration;
-        Timer(const std::string &name) : name(name) { start_time = time_ms(); }
-        ~Timer() {
+        inline Timer(const std::string &name) : name(name) { start_time = time_ms(); }
+        inline ~Timer() {
             end_time = time_ms();
             duration = end_time - start_time;
             print();
         }
-        void print() const { std::cout << name << " took " << duration << " ms" << std::endl; }
+        inline void print() const { std::cout << name << " took " << duration << " ms" << std::endl; }
     };
 
 // #define SSDF_TIMER(name) Timer t_##name(#name);
 #define SSDF_TIMER(...) 
 
-    // out is of size npoints
+    /**
+     * @brief Compute unsigned point-to-surface distances.
+     *
+     * @tparam G Geometry type (float/double) for coordinates.
+     * @tparam T Output distance type.
+     * @tparam I Index type for triangle vertices.
+     * @param npoints Number of query points.
+     * @param x,y,z Arrays of size npoints with point coordinates (SoA).
+     * @param nselements Number of surface triangles.
+     * @param s0,s1,s2 Arrays of size nselements with vertex indices (triangle list).
+     * @param nspoints Number of surface vertices.
+     * @param sx,sy,sz Arrays of size nspoints with surface vertex coordinates (SoA).
+     * @param out Output array of size npoints. On input, values are treated as
+     *            current best distances (initialize to large values if unused).
+     * @return int 0 on success.
+     *
+     * Notes:
+     * - Distances are unsigned (closest-point Euclidean distance).
+     * - OpenMP is used when enabled at build time for parallelism.
+     */
     template <typename G, typename T, typename I>
     int edf(const ptrdiff_t npoints,
             const G *const SSDF_RESTRICT x,
