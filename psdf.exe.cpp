@@ -132,6 +132,7 @@ int main(int argc, char **argv) {
         s1[i] -= static_cast<I>(surf_sp_offset);
         s2[i] -= static_cast<I>(surf_sp_offset);
     }
+    // TODO: Instead of using local indexing compact the indices and reduce the sizes
 
     // Read points (distributed)
     ptrdiff_t npoints_global = 0, points_offset = 0;
@@ -149,24 +150,67 @@ int main(int argc, char **argv) {
     if (INPUT_SDF) {
         mpi_read_distributed<T>(INPUT_SDF, out, comm, npoints_global, points_offset);
     } else {
-        out.resize(lnpoints, std::numeric_limits<T>::max());
+        out.resize(lnpoints, 10000);
     }
-    // Compute EDF for local points vs distributed surface
-    ssdf::pedf<G, T, I>(comm,
-                        lnpoints,
-                        x.data(),
-                        y.data(),
-                        z.data(),
-                        static_cast<ptrdiff_t>(s0.size()),
-                        s0.data(),
-                        s1.data(),
-                        s2.data(),
-                        static_cast<ptrdiff_t>(sx.size()),
-                        sx.data(),
-                        sy.data(),
-                        sz.data(),
-                        out.data()
-                        );
+
+    int SSDF_DOUBLE_PRECISION = 0;
+    SSDF_READ_ENV(SSDF_DOUBLE_PRECISION, std::stoi);
+    if (SSDF_DOUBLE_PRECISION == 1 && !std::is_same<T, double>::value) {
+        // Convert input and out to double
+        std::vector<double> x_double(lnpoints);
+        std::vector<double> y_double(lnpoints);
+        std::vector<double> z_double(lnpoints);
+        std::vector<double> out_double(lnpoints);
+        std::vector<double> sx_double(sx.size());
+        std::vector<double> sy_double(sy.size());
+        std::vector<double> sz_double(sz.size());
+
+        for (ptrdiff_t i = 0; i < lnpoints; ++i) {
+            x_double[i] = double(x[i]);
+            y_double[i] = double(y[i]);
+            z_double[i] = double(z[i]);
+            out_double[i] = double(out[i]);
+            sx_double[i] = double(sx[i]);
+            sy_double[i] = double(sy[i]);
+            sz_double[i] = double(sz[i]);
+        }
+
+        ssdf::pedf<double, double, I>(comm,
+                                      lnpoints,
+                                      x_double.data(),
+                                      y_double.data(),
+                                      z_double.data(),
+                                      static_cast<ptrdiff_t>(s0.size()),
+                                      s0.data(),
+                                      s1.data(),
+                                      s2.data(),
+                                      static_cast<ptrdiff_t>(sx.size()),
+                                      sx_double.data(),
+                                      sy_double.data(),
+                                      sz_double.data(),
+                                      out_double.data());
+
+        // Convert output to float
+        for (ptrdiff_t i = 0; i < lnpoints; ++i) {
+            out[i] = static_cast<T>(out_double[i]);
+        }
+
+    } else {
+        ssdf::pedf<G, T, I>(comm,
+                            lnpoints,
+                            x.data(),
+                            y.data(),
+                            z.data(),
+                            static_cast<ptrdiff_t>(s0.size()),
+                            s0.data(),
+                            s1.data(),
+                            s2.data(),
+                            static_cast<ptrdiff_t>(sx.size()),
+                            sx.data(),
+                            sy.data(),
+                            sz.data(),
+                            out.data());
+    }
 
     // Write output
     mpi_write_distributed<T>(output_file, out, points_offset, comm);
