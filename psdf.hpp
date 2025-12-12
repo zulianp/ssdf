@@ -5,8 +5,8 @@
 #include <vector>
 #include "ssdf.hpp"
 
-// #define PSDF_TIMER(name) ssdf::Timer t_##name(#name);
-#define PSDF_TIMER(...)
+#define PSDF_TIMER(name) ssdf::Timer t_##name(#name);
+// #define PSDF_TIMER(...)
 
 
 

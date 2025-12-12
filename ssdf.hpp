@@ -42,18 +42,18 @@ namespace ssdf {
 
     // Compute squared distance from point p to triangle (a, b, c)
     template <typename T>
-    inline T point_triangle_dist_sq(const T px,
-                                    const T py,
-                                    const T pz,
-                                    const T ax,
-                                    const T ay,
-                                    const T az,
-                                    const T bx,
-                                    const T by,
-                                    const T bz,
-                                    const T cx,
-                                    const T cy,
-                                    const T cz) {
+    inline static T point_triangle_dist_sq(const T px,
+                                           const T py,
+                                           const T pz,
+                                           const T ax,
+                                           const T ay,
+                                           const T az,
+                                           const T bx,
+                                           const T by,
+                                           const T bz,
+                                           const T cx,
+                                           const T cy,
+                                           const T cz) {
         // Based on Real-Time Collision Detection (Christer Ericson)
         const T abx = bx - ax, aby = by - ay, abz = bz - az;
         const T acx = cx - ax, acy = cy - ay, acz = cz - az;
@@ -115,38 +115,38 @@ namespace ssdf {
     }
 
     template <typename T>
-    inline T point_triangle_dist_sq_approx(const T px,
-                                           const T py,
-                                           const T pz,
-                                           const T ax,
-                                           const T ay,
-                                           const T az,
-                                           const T bx,
-                                           const T by,
-                                           const T bz,
-                                           const T cx,
-                                           const T cy,
-                                           const T cz) {
+    inline static T point_triangle_dist_sq_approx(const T px,
+                                                  const T py,
+                                                  const T pz,
+                                                  const T ax,
+                                                  const T ay,
+                                                  const T az,
+                                                  const T bx,
+                                                  const T by,
+                                                  const T bz,
+                                                  const T cx,
+                                                  const T cy,
+                                                  const T cz) {
         const T dx = std::min({std::abs(px - ax), std::abs(px - bx), std::abs(px - cx)});
         const T dy = std::min({std::abs(py - ay), std::abs(py - by), std::abs(py - cy)});
         const T dz = std::min({std::abs(pz - az), std::abs(pz - bz), std::abs(pz - cz)});
         return dx * dx + dy * dy + dz * dz;
     }
 
-    // Conservative check: whether any triangle in the chunk could improve best_dist_sq using AABB
     template <typename T, typename I>
-    inline bool chunk_aabb_can_improve(const T px,
-                                       const T py,
-                                       const T pz,
-                                       const T best_dist_sq,
-                                       const ptrdiff_t chunk_start,
-                                       const I *const SSDF_RESTRICT sort_idx,
-                                       const T *const SSDF_RESTRICT surf_minx,
-                                       const T *const SSDF_RESTRICT surf_maxx,
-                                       const T *const SSDF_RESTRICT surf_miny,
-                                       const T *const SSDF_RESTRICT surf_maxy,
-                                       const T *const SSDF_RESTRICT surf_minz,
-                                       const T *const SSDF_RESTRICT surf_maxz) {
+    inline static bool chunk_aabb_can_improve(const T px,
+                                              const T py,
+                                              const T pz,
+                                              const T best_dist_sq,
+                                              const ptrdiff_t chunk_start,
+                                              const I *const SSDF_RESTRICT sort_idx,
+                                              const T *const SSDF_RESTRICT surf_minx,
+                                              const T *const SSDF_RESTRICT surf_maxx,
+                                              const T *const SSDF_RESTRICT surf_miny,
+                                              const T *const SSDF_RESTRICT surf_maxy,
+                                              const T *const SSDF_RESTRICT surf_minz,
+                                              const T *const SSDF_RESTRICT surf_maxz,
+                                              int *const SSDF_RESTRICT canit) {
         bool any = false;
 #pragma omp simd reduction(| : any)
         for (ptrdiff_t lane = 0; lane < VECTOR_SIZE; ++lane) {
@@ -160,7 +160,8 @@ namespace ssdf {
             const T dz = (pz < surf_minz[orig_idx]) ? (surf_minz[orig_idx] - pz)
                                                     : ((pz > surf_maxz[orig_idx]) ? (pz - surf_maxz[orig_idx]) : T(0));
             const T dist_sq = dx * dx + dy * dy + dz * dz;
-            any = any || (dist_sq < best_dist_sq);
+            canit[lane] = (dist_sq < best_dist_sq);
+            any = any || canit[lane];
         }
         return any;
     }
@@ -168,7 +169,7 @@ namespace ssdf {
     // Helper function to compute point-to-triangle distance for a fixed-size chunk
     // Uses fixed-size loop to enable compiler vectorization
     template <typename G, typename T, typename I>
-    inline T compute_triangle_dist_chunk(const G px,
+    inline static T compute_triangle_dist_chunk(const G px,
                                          const G py,
                                          const G pz,
                                          const ptrdiff_t chunk_start,
@@ -226,7 +227,7 @@ namespace ssdf {
     };
 
 // #define SSDF_TIMER(name) Timer t_##name(#name);
-#define SSDF_TIMER(...) 
+#define SSDF_TIMER(...)
 
     /**
      * @brief Compute unsigned point-to-surface distances.
