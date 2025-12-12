@@ -157,10 +157,10 @@ int main(int argc, char **argv) {
     SSDF_READ_ENV(SSDF_DOUBLE_PRECISION, std::stoi);
     if (SSDF_DOUBLE_PRECISION == 1 && !std::is_same<T, double>::value) {
         // Convert input and out to double
-        std::vector<double> x_double(lnpoints);
-        std::vector<double> y_double(lnpoints);
-        std::vector<double> z_double(lnpoints);
-        std::vector<double> out_double(lnpoints);
+        std::vector<double> x_double(x.size());
+        std::vector<double> y_double(y.size());
+        std::vector<double> z_double(z.size());
+        std::vector<double> out_double(out.size());
         std::vector<double> sx_double(sx.size());
         std::vector<double> sy_double(sy.size());
         std::vector<double> sz_double(sz.size());
@@ -170,6 +170,9 @@ int main(int argc, char **argv) {
             y_double[i] = double(y[i]);
             z_double[i] = double(z[i]);
             out_double[i] = double(out[i]);
+        }
+
+        for (ptrdiff_t i = 0; i < sx.size(); ++i) {
             sx_double[i] = double(sx[i]);
             sy_double[i] = double(sy[i]);
             sz_double[i] = double(sz[i]);

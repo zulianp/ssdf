@@ -55,7 +55,7 @@ namespace ssdf {
     };
 
 // #define SSDF_TIMER(name) Timer t_##name(#name);
-    // #define SSDF_TIMER(...)
+    #define SSDF_TIMER(...)
 
     // Compute squared distance from point p to triangle (a, b, c)
     template <typename T>

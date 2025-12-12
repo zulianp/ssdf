@@ -22,7 +22,7 @@ static long check_file_size(const char *filepath, size_t element_size) {
     }
     long file_size = get_file_size(f);
     fclose(f);
-    
+
     if (file_size < 0 || file_size % element_size != 0) {
         return -1;
     }
@@ -47,7 +47,9 @@ static ptrdiff_t read_raw_file(const char *filepath, void *data, size_t element_
     if (file_size % element_size != 0) {
         fprintf(stderr,
                 "Error: File '%s' size (%ld) is not a multiple of element size (%zu)\n",
-                filepath, file_size, element_size);
+                filepath,
+                file_size,
+                element_size);
         fclose(f);
         return -1;
     }
@@ -127,101 +129,100 @@ int main(int argc, char *argv[]) {
 
     // 1) Check that all files exist and determine sizes
     printf("Checking files and determining sizes...\n");
-    
+
     struct SurfaceInfo {
         const char *folder;
         ptrdiff_t nspoints;
         ptrdiff_t nselements;
     };
     std::vector<SurfaceInfo> surface_infos;
-    
+
     ptrdiff_t max_nspoints = 0;
     ptrdiff_t max_nselements = 0;
-    
+
     for (size_t folder_idx = 0; folder_idx < surf_folders.size(); folder_idx++) {
         const char *surf_folder = surf_folders[folder_idx];
-        
+
         std::string surf_x_path = make_path(surf_folder, "x.raw");
         std::string surf_y_path = make_path(surf_folder, "y.raw");
         std::string surf_z_path = make_path(surf_folder, "z.raw");
         std::string surf_i0_path = make_path(surf_folder, "i0.raw");
         std::string surf_i1_path = make_path(surf_folder, "i1.raw");
         std::string surf_i2_path = make_path(surf_folder, "i2.raw");
-        
+
         // Check all files exist
         long x_size = check_file_size(surf_x_path.c_str(), sizeof(G));
         if (x_size < 0) {
             fprintf(stderr, "Error: Cannot open or invalid file '%s'\n", surf_x_path.c_str());
             return 1;
         }
-        
+
         if (check_file_size(surf_y_path.c_str(), sizeof(G)) != x_size ||
             check_file_size(surf_z_path.c_str(), sizeof(G)) != x_size) {
             fprintf(stderr, "Error: Surface coordinate files have mismatched sizes in '%s'\n", surf_folder);
             return 1;
         }
-        
+
         long i0_size = check_file_size(surf_i0_path.c_str(), sizeof(I));
         if (i0_size < 0) {
             fprintf(stderr, "Error: Cannot open or invalid file '%s'\n", surf_i0_path.c_str());
             return 1;
         }
-        
+
         if (check_file_size(surf_i1_path.c_str(), sizeof(I)) != i0_size ||
             check_file_size(surf_i2_path.c_str(), sizeof(I)) != i0_size) {
             fprintf(stderr, "Error: Surface index files have mismatched sizes in '%s'\n", surf_folder);
             return 1;
         }
-        
+
         ptrdiff_t nspoints = x_size / sizeof(G);
         ptrdiff_t nselements = i0_size / sizeof(I);
-        
+
         surface_infos.push_back({surf_folder, nspoints, nselements});
-        
+
         max_nspoints = std::max(max_nspoints, nspoints);
         max_nselements = std::max(max_nselements, nselements);
-        
-        printf("  Surface %zu (%s): %td points, %td elements\n", 
-               folder_idx + 1, surf_folder, nspoints, nselements);
+
+        printf("  Surface %zu (%s): %td points, %td elements\n", folder_idx + 1, surf_folder, nspoints, nselements);
     }
-    
+
     // Check points folder files
     std::string points_x_path = make_path(points_folder, "x.raw");
     std::string points_y_path = make_path(points_folder, "y.raw");
     std::string points_z_path = make_path(points_folder, "z.raw");
-    
+
     long points_x_size = check_file_size(points_x_path.c_str(), sizeof(G));
     if (points_x_size < 0) {
         fprintf(stderr, "Error: Cannot open or invalid file '%s'\n", points_x_path.c_str());
         return 1;
     }
-    
+
     if (check_file_size(points_y_path.c_str(), sizeof(G)) != points_x_size ||
         check_file_size(points_z_path.c_str(), sizeof(G)) != points_x_size) {
         fprintf(stderr, "Error: Point coordinate files have mismatched sizes\n");
         return 1;
     }
-    
+
     ptrdiff_t npoints = points_x_size / sizeof(G);
     printf("  Points: %td points\n", npoints);
-    
+
     // 2) Read points folder
     printf("Reading points...\n");
     std::vector<G> x(npoints);
     std::vector<G> y(npoints);
     std::vector<G> z(npoints);
-    
+
     if (read_raw_file(points_x_path.c_str(), x.data(), sizeof(G)) != npoints ||
         read_raw_file(points_y_path.c_str(), y.data(), sizeof(G)) != npoints ||
         read_raw_file(points_z_path.c_str(), z.data(), sizeof(G)) != npoints) {
         fprintf(stderr, "Error: Failed to read point coordinates\n");
         return 1;
     }
-    
+
     // 3) Read optional input SDF
     const char *INPUT_SDF = getenv("INPUT_SDF");
     std::vector<T> out(npoints);
-    
+
     if (INPUT_SDF) {
         printf("Reading input SDF from '%s'...\n", INPUT_SDF);
         FILE *sdf_file = fopen(INPUT_SDF, "rb");
@@ -229,28 +230,27 @@ int main(int argc, char *argv[]) {
             fprintf(stderr, "Error: Cannot open input SDF file '%s'\n", INPUT_SDF);
             return 1;
         }
-        
+
         long sdf_file_size = get_file_size(sdf_file);
         if (sdf_file_size < 0 || sdf_file_size % sizeof(T) != 0) {
             fprintf(stderr, "Error: Invalid input SDF file size (%ld bytes)\n", sdf_file_size);
             fclose(sdf_file);
             return 1;
         }
-        
+
         ptrdiff_t sdf_npoints = sdf_file_size / sizeof(T);
         if (sdf_npoints != npoints) {
-            fprintf(stderr, "Error: Input SDF file has %td points, expected %td\n", 
-                    sdf_npoints, npoints);
+            fprintf(stderr, "Error: Input SDF file has %td points, expected %td\n", sdf_npoints, npoints);
             fclose(sdf_file);
             return 1;
         }
-        
+
         if (fread(out.data(), sizeof(T), npoints, sdf_file) != npoints) {
             fprintf(stderr, "Error: Failed to read SDF values from '%s'\n", INPUT_SDF);
             fclose(sdf_file);
             return 1;
         }
-        
+
         fclose(sdf_file);
     } else {
         // Initialize output with large distances
@@ -258,17 +258,16 @@ int main(int argc, char *argv[]) {
             out[i] = std::numeric_limits<T>::max();
         }
     }
-    
+
     // 4) Allocate reusable surface memory (use maximum size needed)
-    printf("Allocating surface memory (max: %td points, %td elements)...\n", 
-           max_nspoints, max_nselements);
+    printf("Allocating surface memory (max: %td points, %td elements)...\n", max_nspoints, max_nselements);
     std::vector<G> sx(max_nspoints);
     std::vector<G> sy(max_nspoints);
     std::vector<G> sz(max_nspoints);
     std::vector<I> s0(max_nselements);
     std::vector<I> s1(max_nselements);
     std::vector<I> s2(max_nselements);
-    
+
     // 5) Loop through surfaces, read one at a time and call edf
     printf("Processing surfaces...\n");
     for (size_t folder_idx = 0; folder_idx < surface_infos.size(); folder_idx++) {
@@ -276,45 +275,107 @@ int main(int argc, char *argv[]) {
         const char *surf_folder = info.folder;
         ptrdiff_t nspoints = info.nspoints;
         ptrdiff_t nselements = info.nselements;
-        
+
         printf("  Processing surface %zu/%zu: %s (%td points, %td elements)\n",
-               folder_idx + 1, surface_infos.size(), surf_folder, nspoints, nselements);
-        
+               folder_idx + 1,
+               surface_infos.size(),
+               surf_folder,
+               nspoints,
+               nselements);
+
         // Read surface point coordinates
         std::string surf_x_path = make_path(surf_folder, "x.raw");
         std::string surf_y_path = make_path(surf_folder, "y.raw");
         std::string surf_z_path = make_path(surf_folder, "z.raw");
-        
+
         if (read_raw_file(surf_x_path.c_str(), sx.data(), sizeof(G)) != nspoints ||
             read_raw_file(surf_y_path.c_str(), sy.data(), sizeof(G)) != nspoints ||
             read_raw_file(surf_z_path.c_str(), sz.data(), sizeof(G)) != nspoints) {
             fprintf(stderr, "Error: Failed to read surface coordinates from '%s'\n", surf_folder);
             return 1;
         }
-        
+
         // Read surface element indices
         std::string surf_i0_path = make_path(surf_folder, "i0.raw");
         std::string surf_i1_path = make_path(surf_folder, "i1.raw");
         std::string surf_i2_path = make_path(surf_folder, "i2.raw");
-        
+
         if (read_raw_file(surf_i0_path.c_str(), s0.data(), sizeof(I)) != nselements ||
             read_raw_file(surf_i1_path.c_str(), s1.data(), sizeof(I)) != nselements ||
             read_raw_file(surf_i2_path.c_str(), s2.data(), sizeof(I)) != nselements) {
             fprintf(stderr, "Error: Failed to read surface indices from '%s'\n", surf_folder);
             return 1;
         }
-        
-        // Call edf for this surface
-        int result = ssdf::edf(npoints, x.data(), y.data(), z.data(), nselements, 
-                              s0.data(), s1.data(), s2.data(), nspoints, 
-                              sx.data(), sy.data(), sz.data(), out.data());
-        
+
+        int SSDF_DOUBLE_PRECISION = 0;
+        SSDF_READ_ENV(SSDF_DOUBLE_PRECISION, std::stoi);
+
+        int result = 0;
+        if (SSDF_DOUBLE_PRECISION == 1 && !std::is_same<T, double>::value) {
+            // Convert input and out to double
+            std::vector<double> x_double(npoints);
+            std::vector<double> y_double(npoints);
+            std::vector<double> z_double(npoints);
+            std::vector<double> out_double(npoints);
+            std::vector<double> sx_double(sx.size());
+            std::vector<double> sy_double(sy.size());
+            std::vector<double> sz_double(sz.size());
+
+            for (ptrdiff_t i = 0; i < npoints; ++i) {
+                x_double[i] = double(x[i]);
+                y_double[i] = double(y[i]);
+                z_double[i] = double(z[i]);
+                out_double[i] = double(out[i]);
+            }
+
+            for (ptrdiff_t i = 0; i < sx.size(); ++i) {
+                sx_double[i] = double(sx[i]);
+                sy_double[i] = double(sy[i]);
+                sz_double[i] = double(sz[i]);
+            }
+
+            result = ssdf::edf<double, double, int>(npoints,
+                               x_double.data(),
+                               y_double.data(),
+                               z_double.data(),
+                               nselements,
+                               s0.data(),
+                               s1.data(),
+                               s2.data(),
+                               nspoints,
+                               sx_double.data(),
+                               sy_double.data(),
+                               sz_double.data(),
+                               out_double.data());
+
+                                   // Convert output to float
+        for (ptrdiff_t i = 0; i < npoints; ++i) {
+            out[i] = T(out_double[i]);
+        }
+
+        } else {
+            // Call edf for this surface
+            result = ssdf::edf(npoints,
+                               x.data(),
+                               y.data(),
+                               z.data(),
+                               nselements,
+                               s0.data(),
+                               s1.data(),
+                               s2.data(),
+                               nspoints,
+                               sx.data(),
+                               sy.data(),
+                               sz.data(),
+                               out.data());
+        }
+
         if (result != 0) {
             fprintf(stderr, "Error: edf function returned non-zero: %d\n", result);
             return 1;
         }
     }
-    
+
     // Write output
     printf("Writing output to '%s'...\n", output_file);
     FILE *fout = fopen(output_file, "wb");
@@ -332,7 +393,9 @@ int main(int argc, char *argv[]) {
 
     fclose(fout);
 
-    printf("Successfully computed SDF for %td points across %zu surfaces, written to '%s'\n", 
-           npoints, surface_infos.size(), output_file);
+    printf("Successfully computed SDF for %td points across %zu surfaces, written to '%s'\n",
+           npoints,
+           surface_infos.size(),
+           output_file);
     return 0;
 }
