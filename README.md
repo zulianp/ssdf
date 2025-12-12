@@ -101,3 +101,11 @@ Cite SSDF if you use it for your work:
   - Reads SoA `x.raw,y.raw,z.raw` and `i0.raw,i1.raw,i2.raw` via `MPI_File_read_at_all`
   - Writes distributed output with `MPI_File_write_at_all`
   - Optional `INPUT_SDF` to initialize output; `PEDF_USE_ALLGATHER=0` to disable allgather
+
+
+## Usage within FSI simulations
+
+In order to save computational time only compute for what matters
+
+1) Compute the edf for the fluid domain keep the `edf` untouched for the rest of the simulation
+2) Create a new array copy of `edf` update it with the current deformed structural surface
