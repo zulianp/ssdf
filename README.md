@@ -88,7 +88,7 @@ Cite SSDF if you use it for your work:
 - Binary driver: `sdf_exe <surf_folder> <points_folder> <output_file>`
   - `surf_folder`: `x.raw,y.raw,z.raw` (float), `i0.raw,i1.raw,i2.raw` (int)
   - `points_folder`: `x.raw,y.raw,z.raw` (float)
-  - Output: binary float array of distances (no count header)
+  - Output: binary float array of distances
 
 ## Using the MPI SDF (pedf)
 
