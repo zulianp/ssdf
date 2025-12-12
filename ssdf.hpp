@@ -197,14 +197,14 @@ namespace ssdf {
             // const T dy = std::min({std::abs(py - ty0), std::abs(py - ty1), std::abs(py - ty2)});
             // const T dz = std::min({std::abs(pz - tz0), std::abs(pz - tz1), std::abs(pz - tz2)});
             // dist[lane] = std::sqrt(dx * dx + dy * dy + dz * dz);
-			dist[lane] = point_triangle_dist_sq(px, py, pz, tx0, ty0, tz0, tx1, ty1, tz1, tx2, ty2, tz2);
+            dist[lane] = point_triangle_dist_sq(px, py, pz, tx0, ty0, tz0, tx1, ty1, tz1, tx2, ty2, tz2);
         }
 
         T best_dist = std::numeric_limits<T>::max();
 
 #pragma omp simd reduction(min : best_dist)
         for (ptrdiff_t lane = 0; lane < VECTOR_SIZE; ++lane) {
-			T dist_sqrt = dist[lane];
+            T dist_sqrt = dist[lane];
             best_dist = MIN(best_dist, dist_sqrt);
         }
 
@@ -225,6 +225,9 @@ namespace ssdf {
         void print() const { std::cout << name << " took " << duration << " ms" << std::endl; }
     };
 
+// #define SSDF_TIMER(name) Timer t_##name(#name);
+#define SSDF_TIMER(...) 
+
     // out is of size npoints
     template <typename G, typename T, typename I>
     int edf(const ptrdiff_t npoints,
@@ -240,7 +243,7 @@ namespace ssdf {
             const G *const SSDF_RESTRICT sy,
             const G *const SSDF_RESTRICT sz,
             T *const SSDF_RESTRICT out) {
-		Timer t_total("edf");
+        SSDF_TIMER(total);
         // Allocate AABB arrays
         T *surf_minx = new T[nselements];
         T *surf_miny = new T[nselements];
@@ -255,7 +258,7 @@ namespace ssdf {
         // 1) Compute surface AABBs
 
         {
-            Timer t_aabb("Compute surface AABBs");
+            SSDF_TIMER(aabb);
 #pragma omp parallel for
             for (ptrdiff_t i = 0; i < nselements; i++) {
                 const I i0 = s0[i], i1 = s1[i], i2 = s2[i];
@@ -274,14 +277,14 @@ namespace ssdf {
 
         // Process each dimension
         for (int dim = 0; dim < 3; dim++) {
-            Timer t_dim("Process dimension " + std::to_string(dim));
+            SSDF_TIMER(dim);
 
             T *surf_min = (dim == 0) ? surf_minx : (dim == 1) ? surf_miny : surf_minz;
             T *surf_max = (dim == 0) ? surf_maxx : (dim == 1) ? surf_maxy : surf_maxz;
             const G *pnt_coord = (dim == 0) ? x : (dim == 1) ? y : z;
 
             {
-                Timer t_sort("Sort surface elements");
+                SSDF_TIMER(sort);
                 // Initialize sort index
                 for (ptrdiff_t i = 0; i < nselements; i++) {
                     sort_idx[i] = i;
@@ -365,7 +368,7 @@ namespace ssdf {
                         const G ty0 = sy[i0], ty1 = sy[i1], ty2 = sy[i2];
                         const G tz0 = sz[i0], tz1 = sz[i1], tz2 = sz[i2];
 
-                        const T dist  = point_triangle_dist_sq(px, py, pz, tx0, ty0, tz0, tx1, ty1, tz1, tx2, ty2, tz2);
+                        const T dist = point_triangle_dist_sq(px, py, pz, tx0, ty0, tz0, tx1, ty1, tz1, tx2, ty2, tz2);
                         best_dist = std::min(best_dist, std::sqrt(dist));
                     }
                 }
@@ -398,7 +401,7 @@ namespace ssdf {
                         const G ty0 = sy[i0], ty1 = sy[i1], ty2 = sy[i2];
                         const G tz0 = sz[i0], tz1 = sz[i1], tz2 = sz[i2];
 
-                        const T dist  = point_triangle_dist_sq(px, py, pz, tx0, ty0, tz0, tx1, ty1, tz1, tx2, ty2, tz2);
+                        const T dist = point_triangle_dist_sq(px, py, pz, tx0, ty0, tz0, tx1, ty1, tz1, tx2, ty2, tz2);
                         best_dist = std::min(best_dist, std::sqrt(dist));
                     }
                 }

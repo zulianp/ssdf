@@ -120,7 +120,6 @@ namespace ssdf {
 
                     std::vector<G> sx_buf(max_spoints), sy_buf(max_spoints), sz_buf(max_spoints);
                     std::vector<I> s0_buf(max_selems), s1_buf(max_selems), s2_buf(max_selems);
-                    std::vector<T> tmp_out(lnpoints);
 
                     for (int root = 0; root < comm_size; ++root) {
                         long long nsp_root = 0, nse_root = 0;
@@ -153,12 +152,7 @@ namespace ssdf {
                         ssdf::edf<G, T, I>(lnpoints, x, y, z,
                                            static_cast<ptrdiff_t>(nse_root), s0_buf.data(), s1_buf.data(), s2_buf.data(),
                                            static_cast<ptrdiff_t>(nsp_root), sx_buf.data(), sy_buf.data(), sz_buf.data(),
-                                           tmp_out.data());
-
-                        // Merge (min) into out
-                        for (ptrdiff_t i = 0; i < lnpoints; ++i) {
-                            out[i] = std::min(out[i], tmp_out[i]);
-                        }
+                                           out);
                     }
                 }
 

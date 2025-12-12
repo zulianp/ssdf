@@ -9,8 +9,8 @@
 
 ### Optional Dependencies
 
-- **OpenMP**: For shared memory parallelization
-- **MPI**: For distributed memory parallelization (TODO
+- **OpenMP**: For shared memory parallelization (Avaialble)
+- **MPI**: For distributed memory parallelization (Available)
 - **CUDA**: For GPU acceleration (TODO)
 - **HIP**: For AMD GPU acceleration (TODO)
 
@@ -79,3 +79,25 @@ Cite SSDF if you use it for your work:
 	year = {2025}
 }
 ```
+
+## Using the CPU SDF (edf)
+
+- API: `ssdf::edf<G,T,I>(npoints, x, y, z, nselements, s0, s1, s2, nspoints, sx, sy, sz, out)`.
+- Inputs: point SoA `(x,y,z)`, surface vertex SoA `(sx,sy,sz)`, triangle indices `(s0,s1,s2)`.
+- Output: `out[i]` is the (unsigned) distance from point i to the surface.
+- Binary driver: `sdf_exe <surf_folder> <points_folder> <output_file>`
+  - `surf_folder`: `x.raw,y.raw,z.raw` (float), `i0.raw,i1.raw,i2.raw` (int)
+  - `points_folder`: `x.raw,y.raw,z.raw` (float)
+  - Output: binary float array of distances (no count header)
+
+## Using the MPI SDF (pedf)
+
+- API: `ssdf::pedf<G,T,I>(comm, lnpoints, x, y, z, lnselements, s0, s1, s2, lnspoints, sx, sy, sz, out, use_allgather=true)`.
+- Data distribution: points and surface are partitioned across ranks.
+- Modes:
+  - `use_allgather=true`: gather surface on all ranks, then compute locally.
+  - `use_allgather=false`: broadcast surface chunks in rounds and take the minimum.
+- Binary driver: `psdf_exe <surf_folder> <points_folder> <output_file>`
+  - Reads SoA `x.raw,y.raw,z.raw` and `i0.raw,i1.raw,i2.raw` via `MPI_File_read_at_all`
+  - Writes distributed output with `MPI_File_write_at_all`
+  - Optional `INPUT_SDF` to initialize output; `PEDF_USE_ALLGATHER=0` to disable allgather
