@@ -1,0 +1,3 @@
+[submodule "external/sccd"]
+	path = external/sccd
+	url = https://github.com/zulianp/sccd.git

@@ -1,0 +1,16 @@
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+
+# Find sccd dependency
+# If sccd target doesn't exist (e.g., from add_subdirectory), try to find it
+if(NOT TARGET sccd)
+    find_dependency(sccd REQUIRED)
+endif()
+
+# Include the exported targets
+include("${CMAKE_CURRENT_LIST_DIR}/ssdfTargets.cmake")
+
+# Check for optional dependencies if needed
+check_required_components(ssdf)
+
