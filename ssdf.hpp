@@ -287,7 +287,7 @@ namespace ssdf {
             for (ptrdiff_t p = 0; p < npoints; p++) {
                 const G px = x[p], py = y[p], pz = z[p];
                 const T pcoord = pnt_coord[p];
-                T best_dist = out[p];
+                T best_dist_sq = out[p] * out[p];
 
                 // Binary search for insertion point
                 ptrdiff_t left = std::lower_bound(surf_min, surf_min + nselements, pcoord) - surf_min;
@@ -298,8 +298,10 @@ namespace ssdf {
                     ptrdiff_t i = start;
 
                     for (; i >= 0; i--) {
-                        if (cum_max[i] < pcoord - best_dist) break;
-                        if (surf_max[i] < pcoord - best_dist) continue;
+                        const T margin = pcoord - cum_max[i];
+                        if (margin * margin > best_dist_sq) break;
+                        const T span = pcoord - surf_max[i];
+                        if (span * span > best_dist_sq) continue;
 
                         const I orig_idx = sort_idx[i];
                         const I i0 = s0[orig_idx], i1 = s1[orig_idx], i2 = s2[orig_idx];
@@ -310,7 +312,7 @@ namespace ssdf {
                         if (!aabb_can_improve<T>(px,
                                                  py,
                                                  pz,
-                                                 best_dist * best_dist,
+                                                 best_dist_sq,
                                                  std::min({tx0, tx1, tx2}),
                                                  std::max({tx0, tx1, tx2}),
                                                  std::min({ty0, ty1, ty2}),
@@ -320,8 +322,8 @@ namespace ssdf {
                             continue;
                         }
 
-                        const T dist = point_triangle_dist_sq(px, py, pz, tx0, ty0, tz0, tx1, ty1, tz1, tx2, ty2, tz2);
-                        best_dist = std::min(best_dist, std::sqrt(dist));
+                        const T dist_sq = point_triangle_dist_sq(px, py, pz, tx0, ty0, tz0, tx1, ty1, tz1, tx2, ty2, tz2);
+                        best_dist_sq = std::min(best_dist_sq, dist_sq);
                     }
                 }
 
@@ -331,7 +333,8 @@ namespace ssdf {
                     ptrdiff_t end = nselements;
                     // Handle remainder (scalar)
                     for (; i < end; i++) {
-                        if (surf_min[i] > pcoord + best_dist) break;
+                        const T margin = surf_min[i] - pcoord;
+                        if (margin * margin > best_dist_sq) break;
 
                         const I orig_idx = sort_idx[i];
 
@@ -343,7 +346,7 @@ namespace ssdf {
                         if (!aabb_can_improve<T>(px,
                                                  py,
                                                  pz,
-                                                 best_dist * best_dist,
+                                                 best_dist_sq,
                                                  std::min({tx0, tx1, tx2}),
                                                  std::max({tx0, tx1, tx2}),
                                                  std::min({ty0, ty1, ty2}),
@@ -353,12 +356,12 @@ namespace ssdf {
                             continue;
                         }
 
-                        const T dist = point_triangle_dist_sq(px, py, pz, tx0, ty0, tz0, tx1, ty1, tz1, tx2, ty2, tz2);
-                        best_dist = std::min(best_dist, std::sqrt(dist));
+                        const T dist_sq = point_triangle_dist_sq(px, py, pz, tx0, ty0, tz0, tx1, ty1, tz1, tx2, ty2, tz2);
+						best_dist_sq = std::min(best_dist_sq, dist_sq);
                     }
                 }
 
-                out[p] = best_dist;
+                out[p] = std::sqrt(best_dist_sq);
             }
         }
 
