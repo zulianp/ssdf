@@ -40,6 +40,23 @@ namespace ssdf {
         return std::chrono::duration<double, std::milli>(duration).count();
     }
 
+    struct Timer {
+        std::string name;
+        double start_time;
+        double end_time;
+        double duration;
+        inline Timer(const std::string &name) : name(name) { start_time = time_ms(); }
+        inline ~Timer() {
+            end_time = time_ms();
+            duration = end_time - start_time;
+            print();
+        }
+        inline void print() const { std::cout << name << " took " << duration << " ms" << std::endl; }
+    };
+
+#define SSDF_TIMER(name) Timer t_##name(#name);
+    // #define SSDF_TIMER(...)
+
     // Compute squared distance from point p to triangle (a, b, c)
     template <typename T>
     inline static T point_triangle_dist_sq(const T px,
@@ -155,25 +172,9 @@ namespace ssdf {
         const T dy = MIN(dymin * dymin, dymax * dymax);
         const T dz = MIN(dzmin * dzmin, dzmax * dzmax);
         const T dist_sq = dx + dy + dz;
-        return dist_sq < best_dist_sq;
+        return dist_sq < best_dist_sq ||
+               (dxmin >= 0 && dxmax <= 0 && dymin >= 0 && dymax <= 0 && dzmin >= 0 && dzmax <= 0);
     }
-
-    struct Timer {
-        std::string name;
-        double start_time;
-        double end_time;
-        double duration;
-        inline Timer(const std::string &name) : name(name) { start_time = time_ms(); }
-        inline ~Timer() {
-            end_time = time_ms();
-            duration = end_time - start_time;
-            print();
-        }
-        inline void print() const { std::cout << name << " took " << duration << " ms" << std::endl; }
-    };
-
-// #define SSDF_TIMER(name) Timer t_##name(#name);
-#define SSDF_TIMER(...)
 
     /**
      * @brief Compute unsigned point-to-surface distances.
@@ -292,7 +293,7 @@ namespace ssdf {
                 // Binary search for insertion point
                 ptrdiff_t left = std::lower_bound(surf_min, surf_min + nselements, pcoord) - surf_min;
 
-                // Check elements to the left (vectorized)
+                // Check elements to the left
                 {
                     ptrdiff_t start = (left > 0 ? left - 1 : 0);
                     ptrdiff_t i = start;
@@ -322,12 +323,13 @@ namespace ssdf {
                             continue;
                         }
 
-                        const T dist_sq = point_triangle_dist_sq(px, py, pz, tx0, ty0, tz0, tx1, ty1, tz1, tx2, ty2, tz2);
+                        const T dist_sq =
+                            point_triangle_dist_sq(px, py, pz, tx0, ty0, tz0, tx1, ty1, tz1, tx2, ty2, tz2);
                         best_dist_sq = std::min(best_dist_sq, dist_sq);
                     }
                 }
 
-                // Check elements to the right (vectorized)
+                // Check elements to the right
                 {
                     ptrdiff_t i = left;
                     ptrdiff_t end = nselements;
@@ -356,8 +358,9 @@ namespace ssdf {
                             continue;
                         }
 
-                        const T dist_sq = point_triangle_dist_sq(px, py, pz, tx0, ty0, tz0, tx1, ty1, tz1, tx2, ty2, tz2);
-						best_dist_sq = std::min(best_dist_sq, dist_sq);
+                        const T dist_sq =
+                            point_triangle_dist_sq(px, py, pz, tx0, ty0, tz0, tx1, ty1, tz1, tx2, ty2, tz2);
+                        best_dist_sq = std::min(best_dist_sq, dist_sq);
                     }
                 }
 
