@@ -50,6 +50,7 @@ set(SSDF_SOURCES
     ssdf.cpp
 )
 
+
 # Collect header files (only include existing files)
 set(SSDF_HEADERS "")
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/ssdf.hpp")
@@ -58,6 +59,11 @@ endif()
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/cell_list.hpp")
     list(APPEND SSDF_HEADERS "${CMAKE_CURRENT_SOURCE_DIR}/cell_list.hpp")
 endif()
+
+if(SSDF_ENABLE_MPI)
+    list(APPEND SSDF_HEADERS psdf.hpp)
+endif()
+
 
 # Create library target (headers are for installation only, not compilation)
 add_library(ssdf ${SSDF_SOURCES})
@@ -152,3 +158,9 @@ add_test(NAME ssdf_basic_test COMMAND ssdf_test)
 # SDF executable
 add_executable(sdf_exe sdf.exe.cpp)
 target_link_libraries(sdf_exe PRIVATE ssdf)
+
+
+if(SSDF_ENABLE_MPI)
+    add_executable(psdf_exe psdf.exe.cpp)
+    target_link_libraries(psdf_exe PRIVATE ssdf)
+endif()

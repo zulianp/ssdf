@@ -64,3 +64,18 @@ After installation, you can use ssdf in your CMake project:
 find_package(ssdf REQUIRED)
 target_link_libraries(your_target PRIVATE ssdf::ssdf)
 ```
+
+
+# Cite SSDF
+
+Cite SSDF if you use it for your work:
+
+```bibtex
+@misc{SSDFgit,
+	author = {Zulian, Patrick,
+	title = {{SSDF}: Simple {Signed Distance Fields}},
+	url = {https://github.com/zulianp/ssdf},
+	howpublished = {https://github.com/zulianp/ssdf},
+	year = {2025}
+}
+```

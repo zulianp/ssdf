@@ -127,13 +127,10 @@ namespace ssdf {
                                            const T cx,
                                            const T cy,
                                            const T cz) {
-        const T dax = px - ax, day = py - ay, daz = pz - az;
-        const T dbx = px - bx, dby = py - by, dbz = pz - bz;
-        const T dcx = px - cx, dcy = py - cy, dcz = pz - cz;
-        const T da_sq = dax * dax + day * day + daz * daz;
-        const T db_sq = dbx * dbx + dby * dby + dbz * dbz;
-        const T dc_sq = dcx * dcx + dcy * dcy + dcz * dcz;
-        return std::min(da_sq, std::min(db_sq, dc_sq));
+        const T dx = std::min({std::abs(px - ax), std::abs(px - bx), std::abs(px - cx)});
+        const T dy = std::min({std::abs(py - ay), std::abs(py - by), std::abs(py - cy)});
+        const T dz = std::min({std::abs(pz - az), std::abs(pz - bz), std::abs(pz - cz)});
+        return dx * dx + dy * dy + dz * dz;
     }
 
     // Conservative check: whether any triangle in the chunk could improve best_dist_sq using AABB
@@ -196,17 +193,19 @@ namespace ssdf {
             const G tz0 = sz[i0], tz1 = sz[i1], tz2 = sz[i2];
 
             // Compute minimum distance to triangle vertices
-            const T dx = std::min({std::abs(px - tx0), std::abs(px - tx1), std::abs(px - tx2)});
-            const T dy = std::min({std::abs(py - ty0), std::abs(py - ty1), std::abs(py - ty2)});
-            const T dz = std::min({std::abs(pz - tz0), std::abs(pz - tz1), std::abs(pz - tz2)});
-            dist[lane] = std::sqrt(dx * dx + dy * dy + dz * dz);
+            // const T dx = std::min({std::abs(px - tx0), std::abs(px - tx1), std::abs(px - tx2)});
+            // const T dy = std::min({std::abs(py - ty0), std::abs(py - ty1), std::abs(py - ty2)});
+            // const T dz = std::min({std::abs(pz - tz0), std::abs(pz - tz1), std::abs(pz - tz2)});
+            // dist[lane] = std::sqrt(dx * dx + dy * dy + dz * dz);
+			dist[lane] = point_triangle_dist_sq(px, py, pz, tx0, ty0, tz0, tx1, ty1, tz1, tx2, ty2, tz2);
         }
 
         T best_dist = std::numeric_limits<T>::max();
 
 #pragma omp simd reduction(min : best_dist)
         for (ptrdiff_t lane = 0; lane < VECTOR_SIZE; ++lane) {
-            best_dist = MIN(best_dist, dist[lane]);
+			T dist_sqrt = dist[lane];
+            best_dist = MIN(best_dist, dist_sqrt);
         }
 
         return best_dist;
@@ -241,6 +240,7 @@ namespace ssdf {
             const G *const SSDF_RESTRICT sy,
             const G *const SSDF_RESTRICT sz,
             T *const SSDF_RESTRICT out) {
+		Timer t_total("edf");
         // Allocate AABB arrays
         T *surf_minx = new T[nselements];
         T *surf_miny = new T[nselements];
@@ -348,7 +348,7 @@ namespace ssdf {
                         if (process_chunk) {
                             T chunk_best = compute_triangle_dist_chunk<G, T, I>(
                                 px, py, pz, chunk_start, sort_idx, s0, s1, s2, sx, sy, sz);
-                            best_dist = std::min(best_dist, chunk_best);
+                            best_dist = std::min(best_dist, std::sqrt(chunk_best));
                         }
 
                         i -= VECTOR_SIZE;
@@ -365,11 +365,8 @@ namespace ssdf {
                         const G ty0 = sy[i0], ty1 = sy[i1], ty2 = sy[i2];
                         const G tz0 = sz[i0], tz1 = sz[i1], tz2 = sz[i2];
 
-                        const T dx = std::min({std::abs(px - tx0), std::abs(px - tx1), std::abs(px - tx2)});
-                        const T dy = std::min({std::abs(py - ty0), std::abs(py - ty1), std::abs(py - ty2)});
-                        const T dz = std::min({std::abs(pz - tz0), std::abs(pz - tz1), std::abs(pz - tz2)});
-                        const T dist = std::sqrt(dx * dx + dy * dy + dz * dz);
-                        best_dist = std::min(best_dist, dist);
+                        const T dist  = point_triangle_dist_sq(px, py, pz, tx0, ty0, tz0, tx1, ty1, tz1, tx2, ty2, tz2);
+                        best_dist = std::min(best_dist, std::sqrt(dist));
                     }
                 }
 
@@ -386,7 +383,7 @@ namespace ssdf {
                         // Process chunk of VECTOR_SIZE elements
                         T chunk_best =
                             compute_triangle_dist_chunk<G, T, I>(px, py, pz, i, sort_idx, s0, s1, s2, sx, sy, sz);
-                        best_dist = std::min(best_dist, chunk_best);
+                        best_dist = std::min(best_dist, std::sqrt(chunk_best));
 
                         i += VECTOR_SIZE;
                     }
@@ -401,11 +398,8 @@ namespace ssdf {
                         const G ty0 = sy[i0], ty1 = sy[i1], ty2 = sy[i2];
                         const G tz0 = sz[i0], tz1 = sz[i1], tz2 = sz[i2];
 
-                        const T dx = std::min({std::abs(px - tx0), std::abs(px - tx1), std::abs(px - tx2)});
-                        const T dy = std::min({std::abs(py - ty0), std::abs(py - ty1), std::abs(py - ty2)});
-                        const T dz = std::min({std::abs(pz - tz0), std::abs(pz - tz1), std::abs(pz - tz2)});
-                        const T dist = std::sqrt(dx * dx + dy * dy + dz * dz);
-                        best_dist = std::min(best_dist, dist);
+                        const T dist  = point_triangle_dist_sq(px, py, pz, tx0, ty0, tz0, tx1, ty1, tz1, tx2, ty2, tz2);
+                        best_dist = std::min(best_dist, std::sqrt(dist));
                     }
                 }
 
