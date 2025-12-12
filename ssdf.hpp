@@ -40,6 +40,134 @@ namespace ssdf {
         return std::chrono::duration<double, std::milli>(duration).count();
     }
 
+    // Compute squared distance from point p to triangle (a, b, c)
+    template <typename T>
+    inline T point_triangle_dist_sq(const T px,
+                                    const T py,
+                                    const T pz,
+                                    const T ax,
+                                    const T ay,
+                                    const T az,
+                                    const T bx,
+                                    const T by,
+                                    const T bz,
+                                    const T cx,
+                                    const T cy,
+                                    const T cz) {
+        // Based on Real-Time Collision Detection (Christer Ericson)
+        const T abx = bx - ax, aby = by - ay, abz = bz - az;
+        const T acx = cx - ax, acy = cy - ay, acz = cz - az;
+        const T apx = px - ax, apy = py - ay, apz = pz - az;
+
+        const T d1 = abx * apx + aby * apy + abz * apz;
+        const T d2 = acx * apx + acy * apy + acz * apz;
+        if (d1 <= T(0) && d2 <= T(0)) return apx * apx + apy * apy + apz * apz;  // barycentric (1,0,0)
+
+        const T bpx = px - bx, bpy = py - by, bpz = pz - bz;
+        const T d3 = abx * bpx + aby * bpy + abz * bpz;
+        const T d4 = acx * bpx + acy * bpy + acz * bpz;
+        if (d3 >= T(0) && d4 <= d3) return bpx * bpx + bpy * bpy + bpz * bpz;  // barycentric (0,1,0)
+
+        const T vc = d1 * d4 - d3 * d2;
+        if (vc <= T(0) && d1 >= T(0) && d3 <= T(0)) {
+            const T v = d1 / (d1 - d3);
+            const T projx = ax + v * abx;
+            const T projy = ay + v * aby;
+            const T projz = az + v * abz;
+            const T dx = px - projx, dy = py - projy, dz = pz - projz;
+            return dx * dx + dy * dy + dz * dz;  // edge AB
+        }
+
+        const T cpx = px - cx, cpy = py - cy, cpz = pz - cz;
+        const T d5 = abx * cpx + aby * cpy + abz * cpz;
+        const T d6 = acx * cpx + acy * cpy + acz * cpz;
+        if (d6 >= T(0) && d5 <= d6) return cpx * cpx + cpy * cpy + cpz * cpz;  // barycentric (0,0,1)
+
+        const T vb = d5 * d2 - d1 * d6;
+        if (vb <= T(0) && d2 >= T(0) && d6 <= T(0)) {
+            const T w = d2 / (d2 - d6);
+            const T projx = ax + w * acx;
+            const T projy = ay + w * acy;
+            const T projz = az + w * acz;
+            const T dx = px - projx, dy = py - projy, dz = pz - projz;
+            return dx * dx + dy * dy + dz * dz;  // edge AC
+        }
+
+        const T va = d3 * d6 - d5 * d4;
+        if (va <= T(0) && (d4 - d3) >= T(0) && (d5 - d6) >= T(0)) {
+            const T w = (d4 - d3) / ((d4 - d3) + (d5 - d6));
+            const T projx = bx + w * (cx - bx);
+            const T projy = by + w * (cy - by);
+            const T projz = bz + w * (cz - bz);
+            const T dx = px - projx, dy = py - projy, dz = pz - projz;
+            return dx * dx + dy * dy + dz * dz;  // edge BC
+        }
+
+        // Inside face region
+        const T denom = T(1) / (va + vb + vc);
+        const T v = vb * denom;
+        const T w = vc * denom;
+        const T projx = ax + abx * v + acx * w;
+        const T projy = ay + aby * v + acy * w;
+        const T projz = az + abz * v + acz * w;
+        const T dx = px - projx, dy = py - projy, dz = pz - projz;
+        return dx * dx + dy * dy + dz * dz;
+    }
+
+    template <typename T>
+    inline T point_triangle_dist_sq_approx(const T px,
+                                           const T py,
+                                           const T pz,
+                                           const T ax,
+                                           const T ay,
+                                           const T az,
+                                           const T bx,
+                                           const T by,
+                                           const T bz,
+                                           const T cx,
+                                           const T cy,
+                                           const T cz) {
+        const T dax = px - ax, day = py - ay, daz = pz - az;
+        const T dbx = px - bx, dby = py - by, dbz = pz - bz;
+        const T dcx = px - cx, dcy = py - cy, dcz = pz - cz;
+        const T da_sq = dax * dax + day * day + daz * daz;
+        const T db_sq = dbx * dbx + dby * dby + dbz * dbz;
+        const T dc_sq = dcx * dcx + dcy * dcy + dcz * dcz;
+        return std::min(da_sq, std::min(db_sq, dc_sq));
+    }
+
+    // Conservative check: whether any triangle in the chunk could improve best_dist_sq using AABB
+    template <typename T, typename I>
+    inline bool chunk_aabb_can_improve(const T px,
+                                       const T py,
+                                       const T pz,
+                                       const T best_dist_sq,
+                                       const ptrdiff_t chunk_start,
+                                       const I *const SSDF_RESTRICT sort_idx,
+                                       const T *const SSDF_RESTRICT surf_minx,
+                                       const T *const SSDF_RESTRICT surf_maxx,
+                                       const T *const SSDF_RESTRICT surf_miny,
+                                       const T *const SSDF_RESTRICT surf_maxy,
+                                       const T *const SSDF_RESTRICT surf_minz,
+                                       const T *const SSDF_RESTRICT surf_maxz) {
+        bool any = false;
+#pragma omp simd reduction(| : any)
+        for (ptrdiff_t lane = 0; lane < VECTOR_SIZE; ++lane) {
+            const ptrdiff_t i = chunk_start + lane;
+            const I orig_idx = sort_idx[i];
+
+            const T dx = (px < surf_minx[orig_idx]) ? (surf_minx[orig_idx] - px)
+                                                    : ((px > surf_maxx[orig_idx]) ? (px - surf_maxx[orig_idx]) : T(0));
+            const T dy = (py < surf_miny[orig_idx]) ? (surf_miny[orig_idx] - py)
+                                                    : ((py > surf_maxy[orig_idx]) ? (py - surf_maxy[orig_idx]) : T(0));
+            const T dz = (pz < surf_minz[orig_idx]) ? (surf_minz[orig_idx] - pz)
+                                                    : ((pz > surf_maxz[orig_idx]) ? (pz - surf_maxz[orig_idx]) : T(0));
+            const T dist_sq = dx * dx + dy * dy + dz * dz;
+            any = any || (dist_sq < best_dist_sq);
+        }
+        return any;
+    }
+
     // Helper function to compute point-to-triangle distance for a fixed-size chunk
     // Uses fixed-size loop to enable compiler vectorization
     template <typename G, typename T, typename I>
