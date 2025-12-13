@@ -97,7 +97,7 @@ Cite SSDF if you use it for your work:
 - Binary driver: `psdf_exe <surf_folder> <points_folder> <output_file>`
   - Reads SoA `x.raw,y.raw,z.raw` and `i0.raw,i1.raw,i2.raw` via `MPI_File_read_at_all`
   - Writes distributed output with `MPI_File_write_at_all`
-  - Optional `INPUT_SDF` to initialize output;
+  - Optional `SSDF_INPUT_SDF` to initialize output;
 
 
 ## Usage within FSI simulations
