@@ -119,20 +119,91 @@ int main(int argc, char **argv) {
     mpi_read_distributed<G>(make_path(surf_folder, "y.raw"), sy, comm, tmp_global, tmp_off);
     mpi_read_distributed<G>(make_path(surf_folder, "z.raw"), sz, comm, tmp_global, tmp_off);
 
-    // Read surface indices (distributed), adjust to local indexing
+    // Read surface indices (distributed)
     ptrdiff_t surf_nselements = 0, surf_se_offset = 0;
     std::vector<I> s0, s1, s2;
     mpi_read_distributed<I>(make_path(surf_folder, "i0.raw"), s0, comm, surf_nselements, surf_se_offset);
     mpi_read_distributed<I>(make_path(surf_folder, "i1.raw"), s1, comm, tmp_global, tmp_off);
     mpi_read_distributed<I>(make_path(surf_folder, "i2.raw"), s2, comm, tmp_global, tmp_off);
 
-    // Convert global indices to local by subtracting surf_sp_offset
-    for (ptrdiff_t i = 0; i < static_cast<ptrdiff_t>(s0.size()); ++i) {
-        s0[i] -= static_cast<I>(surf_sp_offset);
-        s1[i] -= static_cast<I>(surf_sp_offset);
-        s2[i] -= static_cast<I>(surf_sp_offset);
+    // Compact indices and points: gather all surface points, then keep only those referenced by local triangles
+    {
+        int size = 0;
+        MPI_Comm_size(comm, &size);
+
+        // Gather all surface points to all ranks
+        std::vector<long long> all_spoints(size);
+        long long lnspoints_ll = static_cast<long long>(sx.size());
+        MPI_Allgather(&lnspoints_ll, 1, MPI_LONG_LONG, all_spoints.data(), 1, MPI_LONG_LONG, comm);
+
+        std::vector<long long> off_spoints(size + 1, 0);
+        for (int r = 0; r < size; ++r) {
+            off_spoints[r + 1] = off_spoints[r] + all_spoints[r];
+        }
+        const ptrdiff_t nspoints_total = static_cast<ptrdiff_t>(off_spoints.back());
+
+        std::vector<G> gx(nspoints_total), gy(nspoints_total), gz(nspoints_total);
+        std::vector<int> sc_sp(size), dsp_sp(size);
+        for (int r = 0; r < size; ++r) {
+            sc_sp[r] = static_cast<int>(all_spoints[r]);
+            dsp_sp[r] = static_cast<int>(off_spoints[r]);
+        }
+
+        const MPI_Datatype dtype_G = ssdf::mpi_type<G>();
+        MPI_Allgatherv(sx.data(), sc_sp[rank], dtype_G, gx.data(), sc_sp.data(), dsp_sp.data(), dtype_G, comm);
+        MPI_Allgatherv(sy.data(), sc_sp[rank], dtype_G, gy.data(), sc_sp.data(), dsp_sp.data(), dtype_G, comm);
+        MPI_Allgatherv(sz.data(), sc_sp[rank], dtype_G, gz.data(), sc_sp.data(), dsp_sp.data(), dtype_G, comm);
+
+        // Find unique point indices referenced by local triangles
+        std::vector<bool> point_used(nspoints_total, false);
+        for (ptrdiff_t i = 0; i < static_cast<ptrdiff_t>(s0.size()); ++i) {
+            if (s0[i] >= 0 && s0[i] < static_cast<I>(nspoints_total)) {
+                point_used[s0[i]] = true;
+            }
+            if (s1[i] >= 0 && s1[i] < static_cast<I>(nspoints_total)) {
+                point_used[s1[i]] = true;
+            }
+            if (s2[i] >= 0 && s2[i] < static_cast<I>(nspoints_total)) {
+                point_used[s2[i]] = true;
+            }
+        }
+
+        // Create mapping from global index to compacted local index
+        std::vector<I> global_to_local(nspoints_total, -1);
+        ptrdiff_t compacted_count = 0;
+        for (ptrdiff_t i = 0; i < nspoints_total; ++i) {
+            if (point_used[i]) {
+                global_to_local[i] = static_cast<I>(compacted_count);
+                ++compacted_count;
+            }
+        }
+
+        // Compact surface points
+        sx.resize(compacted_count);
+        sy.resize(compacted_count);
+        sz.resize(compacted_count);
+        for (ptrdiff_t i = 0; i < nspoints_total; ++i) {
+            if (point_used[i]) {
+                const ptrdiff_t local_idx = global_to_local[i];
+                sx[local_idx] = gx[i];
+                sy[local_idx] = gy[i];
+                sz[local_idx] = gz[i];
+            }
+        }
+
+        // Remap triangle indices to compacted local indices
+        for (ptrdiff_t i = 0; i < static_cast<ptrdiff_t>(s0.size()); ++i) {
+            if (s0[i] >= 0 && s0[i] < static_cast<I>(nspoints_total)) {
+                s0[i] = global_to_local[s0[i]];
+            }
+            if (s1[i] >= 0 && s1[i] < static_cast<I>(nspoints_total)) {
+                s1[i] = global_to_local[s1[i]];
+            }
+            if (s2[i] >= 0 && s2[i] < static_cast<I>(nspoints_total)) {
+                s2[i] = global_to_local[s2[i]];
+            }
+        }
     }
-    // TODO: Instead of using local indexing compact the indices and reduce the sizes
 
     // Read points (distributed)
     ptrdiff_t npoints_global = 0, points_offset = 0;
