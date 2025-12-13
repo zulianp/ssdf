@@ -5,12 +5,56 @@
 #include <vector>
 #include "ssdf.hpp"
 
-#define PSDF_TIMER(name) ssdf::Timer t_##name(#name);
+#define PSDF_TIMER(comm, name) ssdf::BarrierTimer t_##name(comm, #name);
 // #define PSDF_TIMER(...)
 
-
-
 namespace ssdf {
+
+    struct BarrierTimer {
+        MPI_Comm comm;
+        std::string name;
+        double start_time;
+        double end_time;
+
+        inline BarrierTimer(MPI_Comm comm, const std::string &name) : comm(comm), name(name) {
+            MPI_Barrier(comm);
+            start_time = time_ms();
+        }
+
+        inline ~BarrierTimer() {
+            end_time = time_ms();
+
+            int rank, size;
+            MPI_Comm_rank(comm, &rank);
+            MPI_Comm_size(comm, &size);
+
+            double times[2] = {start_time, end_time};
+
+            if (!rank) {
+                std::vector<double> all(size * 2);
+                MPI_Gather(times, 2, MPI_DOUBLE, all.data(), 2, MPI_DOUBLE, 0, comm);
+
+                double begin = all[0];
+                double end = all[1];
+                double avg = 0;
+
+                for (int r = 0; r < size; r++) {
+                    const int i = r * 2;
+                    const double s = all[i];
+                    const double e = all[i + 1];
+                    avg += e - s;
+
+                    begin = std::min(begin, s);
+                    end = std::max(end, e);
+                }
+                avg /= size;
+
+                printf("Overall %g [ms], Local avg duration %g [ms]\n", end - begin, avg);
+            } else {
+                MPI_Gather(times, 2, MPI_DOUBLE, nullptr, 0, MPI_DOUBLE, 0, comm);
+            }
+        }
+    };
 
     template <typename T>
     MPI_Datatype mpi_type();
@@ -69,7 +113,7 @@ namespace ssdf {
              const G *const SSDF_RESTRICT sy,
              const G *const SSDF_RESTRICT sz,
              T *const SSDF_RESTRICT out) {
-        PSDF_TIMER(total);
+        PSDF_TIMER(comm, total);
         int comm_size = 0, comm_rank = 0;
         MPI_Comm_size(comm, &comm_size);
         MPI_Comm_rank(comm, &comm_rank);
@@ -124,37 +168,16 @@ namespace ssdf {
                 dsp_se[r] = static_cast<int>(off_selems[r]);
             }
 
-            MPI_Allgatherv(
-                sx, sc_sp[comm_rank], mpi_type_G, gx.data(), sc_sp.data(), dsp_sp.data(), mpi_type_G, comm);
-            MPI_Allgatherv(
-                sy, sc_sp[comm_rank], mpi_type_G, gy.data(), sc_sp.data(), dsp_sp.data(), mpi_type_G, comm);
-            MPI_Allgatherv(
-                sz, sc_sp[comm_rank], mpi_type_G, gz.data(), sc_sp.data(), dsp_sp.data(), mpi_type_G, comm);
+            MPI_Allgatherv(sx, sc_sp[comm_rank], mpi_type_G, gx.data(), sc_sp.data(), dsp_sp.data(), mpi_type_G, comm);
+            MPI_Allgatherv(sy, sc_sp[comm_rank], mpi_type_G, gy.data(), sc_sp.data(), dsp_sp.data(), mpi_type_G, comm);
+            MPI_Allgatherv(sz, sc_sp[comm_rank], mpi_type_G, gz.data(), sc_sp.data(), dsp_sp.data(), mpi_type_G, comm);
 
-            MPI_Allgatherv(s0_adj.data(),
-                           sc_se[comm_rank],
-                           mpi_type_I,
-                           gs0.data(),
-                           sc_se.data(),
-                           dsp_se.data(),
-                           mpi_type_I,
-                           comm);
-            MPI_Allgatherv(s1_adj.data(),
-                           sc_se[comm_rank],
-                           mpi_type_I,
-                           gs1.data(),
-                           sc_se.data(),
-                           dsp_se.data(),
-                           mpi_type_I,
-                           comm);
-            MPI_Allgatherv(s2_adj.data(),
-                           sc_se[comm_rank],
-                           mpi_type_I,
-                           gs2.data(),
-                           sc_se.data(),
-                           dsp_se.data(),
-                           mpi_type_I,
-                           comm);
+            MPI_Allgatherv(
+                s0_adj.data(), sc_se[comm_rank], mpi_type_I, gs0.data(), sc_se.data(), dsp_se.data(), mpi_type_I, comm);
+            MPI_Allgatherv(
+                s1_adj.data(), sc_se[comm_rank], mpi_type_I, gs1.data(), sc_se.data(), dsp_se.data(), mpi_type_I, comm);
+            MPI_Allgatherv(
+                s2_adj.data(), sc_se[comm_rank], mpi_type_I, gs2.data(), sc_se.data(), dsp_se.data(), mpi_type_I, comm);
 
             // Compute EDF for local points against global surface
             ssdf::edf<G, T, I>(lnpoints,
@@ -181,7 +204,7 @@ namespace ssdf {
             std::vector<I> s0_buf(max_selems), s1_buf(max_selems), s2_buf(max_selems);
 
             for (int root = 0; root < comm_size; ++root) {
-                PSDF_TIMER(round);
+                PSDF_TIMER(comm, round);
 
                 long long nsp_root = 0, nse_root = 0;
                 if (comm_rank == root) {
