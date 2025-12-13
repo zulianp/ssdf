@@ -90,7 +90,7 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, "\n");
         fprintf(stderr, "Environment variables:\n");
         fprintf(stderr,
-                "  - INPUT_SDF: Path to input SDF file to initialize from "
+                "  - SSDF_INPUT_SDF: Path to input SDF file to initialize from "
                 "(optional)\n");
         return 1;
     }
@@ -220,14 +220,14 @@ int main(int argc, char *argv[]) {
     }
 
     // 3) Read optional input SDF
-    const char *INPUT_SDF = getenv("INPUT_SDF");
+    const char *SSDF_INPUT_SDF = getenv("SSDF_INPUT_SDF");
     std::vector<T> out(npoints);
 
-    if (INPUT_SDF) {
-        printf("Reading input SDF from '%s'...\n", INPUT_SDF);
-        FILE *sdf_file = fopen(INPUT_SDF, "rb");
+    if (SSDF_INPUT_SDF) {
+        printf("Reading input SDF from '%s'...\n", SSDF_INPUT_SDF);
+        FILE *sdf_file = fopen(SSDF_INPUT_SDF, "rb");
         if (!sdf_file) {
-            fprintf(stderr, "Error: Cannot open input SDF file '%s'\n", INPUT_SDF);
+            fprintf(stderr, "Error: Cannot open input SDF file '%s'\n", SSDF_INPUT_SDF);
             return 1;
         }
 
@@ -246,7 +246,7 @@ int main(int argc, char *argv[]) {
         }
 
         if (fread(out.data(), sizeof(T), npoints, sdf_file) != npoints) {
-            fprintf(stderr, "Error: Failed to read SDF values from '%s'\n", INPUT_SDF);
+            fprintf(stderr, "Error: Failed to read SDF values from '%s'\n", SSDF_INPUT_SDF);
             fclose(sdf_file);
             return 1;
         }

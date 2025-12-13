@@ -49,7 +49,7 @@ namespace ssdf {
                 }
                 avg /= size;
 
-                printf("Overall %g [ms], Local avg duration %g [ms]\n", end - begin, avg);
+                printf("%s: overall %g [ms], avg %g [ms]\n", name.c_str(), end - begin, avg);
             } else {
                 MPI_Gather(times, 2, MPI_DOUBLE, nullptr, 0, MPI_DOUBLE, 0, comm);
             }
@@ -121,14 +121,15 @@ namespace ssdf {
         auto mpi_type_G = mpi_type<G>();
         auto mpi_type_I = mpi_type<I>();
 
-        const bool use_allgather = true;
+        int SSDF_USE_ALLGATHER = 1;
+        SSDF_READ_ENV(SSDF_USE_ALLGATHER, atoi);
 
         // Ensure output starts with large values (DONE Outside)
         // for (ptrdiff_t i = 0; i < lnpoints; ++i) {
         //     out[i] = std::numeric_limits<T>::max();
         // }
 
-        if (use_allgather) {
+        if (SSDF_USE_ALLGATHER) {
             // Gather counts
             std::vector<long long> all_spoints(comm_size), all_selems(comm_size);
             long long lnspoints_ll = static_cast<long long>(lnspoints);

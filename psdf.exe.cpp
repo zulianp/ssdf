@@ -144,11 +144,11 @@ int main(int argc, char **argv) {
 
     // Output buffer
 
-    const char *INPUT_SDF = std::getenv("INPUT_SDF");
+    const char *SSDF_INPUT_SDF = std::getenv("SSDF_INPUT_SDF");
 
     std::vector<T> out;
-    if (INPUT_SDF) {
-        mpi_read_distributed<T>(INPUT_SDF, out, comm, npoints_global, points_offset);
+    if (SSDF_INPUT_SDF) {
+        mpi_read_distributed<T>(SSDF_INPUT_SDF, out, comm, npoints_global, points_offset);
     } else {
         out.resize(lnpoints, 10000);
     }
