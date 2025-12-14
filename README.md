@@ -82,11 +82,12 @@ Cite SSDF if you use it for your work:
 
 ## Using the CPU SDF (edf)
 
-- API: `ssdf::edf<G,T,I>(...)` (reference, USE THIS), `ssdf::edf_celllist<G,T,I>(...)` (cell-grid variant, WIP buggy)
+- API: `ssdf::edf<G,T,I>(...)` (reference), `ssdf::edf_celllist<G,T,I>(...)` (cell-list, best performance version)
+- Use `ssdf::edf_select<G,T,I>(...)` for using the best perfoming version selected by the implementor
 - Inputs: point SoA `(x,y,z)`, surface vertex SoA `(sx,sy,sz)`, triangle indices `(s0,s1,s2)`.
 - Output: `out[i]` is the (unsigned) distance from point i to the surface.
 - Cell-list variant is untesed for now use edf for correctness
-- Optional validation: set `SSDF_CELL_VALIDATE=1` alongside `SSDF_USE_CELL_LIST` to run both paths and report max difference (copies the cell-list result to `out`).
+- Optional validation: set `SSDF_CELL_VALIDATE=1` alongside to run both paths and report max difference (copies the cell-list result to `out`).
 - Binary driver: `sdf_exe <surf_folder> <points_folder> <output_file>`
   - `surf_folder`: `x.raw,y.raw,z.raw` (float), `i0.raw,i1.raw,i2.raw` (int)
   - `points_folder`: `x.raw,y.raw,z.raw` (float)

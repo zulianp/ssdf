@@ -299,7 +299,6 @@ namespace ssdf {
                 T best_sq = out[p] * out[p];
 
                 // Binary search for insertion point
-                // ptrdiff_t left = std::lower_bound(cum_max, cum_max + nselements, pcoord) - cum_max;
                 ptrdiff_t left = std::lower_bound(surf_min, surf_min + nselements, pcoord) - surf_min;
 
                 // Check elements to the left
@@ -378,7 +377,27 @@ namespace ssdf {
         return 0;
     }
 
-    // High-performance EDF using a 2D cell grid + sorted dimension
+    /**
+     * @brief Compute unsigned point-to-surface distances.
+     *
+     * @tparam G Geometry type (float/double) for coordinates.
+     * @tparam T Output distance type.
+     * @tparam I Index type for triangle vertices.
+     * @param npoints Number of query points.
+     * @param x,y,z Arrays of size npoints with point coordinates (SoA).
+     * @param nselements Number of surface triangles.
+     * @param s0,s1,s2 Arrays of size nselements with vertex indices (triangle list).
+     * @param nspoints Number of surface vertices.
+     * @param sx,sy,sz Arrays of size nspoints with surface vertex coordinates (SoA).
+     * @param out Output array of size npoints. On input, values are treated as
+     *            current best distances (initialize to large values if unused).
+     * @return int 0 on success.
+     *
+     * Notes:
+     * - Distances are unsigned (closest-point Euclidean distance).
+     * - OpenMP is used when enabled at build time for parallelism.
+     * - High-performance EDF using a 2D cell grid + sorted dimension
+     */
     template <typename G, typename T, typename I>
     int edf_celllist(const ptrdiff_t npoints,
                      const G *const SSDF_RESTRICT x,
@@ -554,6 +573,7 @@ namespace ssdf {
         const G *sorted_max = (sort_axis == 0) ? tmaxx.data() : (sort_axis == 1) ? tmaxy.data() : tmaxz.data();
 
         // Sort per cell on sort_axis
+        #pragma omp parallel for
         for (ptrdiff_t c = 0; c < ncells; ++c) {
             const ptrdiff_t begin = cell_ptr[c];
             const ptrdiff_t end = cell_ptr[c + 1];
@@ -596,6 +616,12 @@ namespace ssdf {
             const G px = x[p], py = y[p], pz = z[p];
             T best_sq = out[p] * out[p];
 
+            // TODO: cenge the brute force by 
+            // 1) finding cell containing the point
+            // 2) process content of the cell
+            // 3) Check sourrounding cells outword ring by ring
+            // Make sure that the loop ends when no improvements are possible
+
             // Iterate cells with conservative culling
             for (ptrdiff_t cid = 0; cid < ncells; ++cid) {
                 if (cell_counts[cid] == 0 || !aabb_can_improve<T>(px,
@@ -614,7 +640,6 @@ namespace ssdf {
                 const ptrdiff_t begin = cell_ptr[cid];
                 const ptrdiff_t end = cell_ptr[cid + 1];
                 const G pcoord = (sort_axis == 0) ? px : (sort_axis == 1) ? py : pz;
-                // const ptrdiff_t left = std::lower_bound(cum_max.data() + begin, cum_max.data() + end, pcoord) - cum_max.data();
                 const ptrdiff_t left = std::lower_bound(sorted_min + begin, sorted_min + end, pcoord) - sorted_min;
 
                 // Scan left
@@ -670,30 +695,33 @@ namespace ssdf {
                    const G *const SSDF_RESTRICT sy,
                    const G *const SSDF_RESTRICT sz,
                    T *const SSDF_RESTRICT out) {
-        int SSDF_USE_CELL_LIST = 0;
+        int SSDF_USE_CELL_LIST = 1;
         int SSDF_CELL_VALIDATE = 0;
         SSDF_READ_ENV(SSDF_USE_CELL_LIST, atoi);
         SSDF_READ_ENV(SSDF_CELL_VALIDATE, atoi);
-        if (SSDF_USE_CELL_LIST) {
-            if (SSDF_CELL_VALIDATE) {
-                std::vector<T> ref(out, out + npoints);
-                std::vector<T> test(out, out + npoints);
-                edf<G, T, I>(npoints, x, y, z, nselements, s0, s1, s2, nspoints, sx, sy, sz, ref.data());
-                edf_celllist<G, T, I>(npoints, x, y, z, nselements, s0, s1, s2, nspoints, sx, sy, sz, test.data());
-                T max_diff = 0;
-                T diff_norm = 0;
-                for (ptrdiff_t i = 0; i < npoints; ++i) {
-                    T rel_diff = std::abs(ref[i] - test[i]) / (std::abs(ref[i]) + 1e-16);
-                    max_diff = std::max<T>(max_diff, rel_diff);
-                    diff_norm += rel_diff * rel_diff;
-                }
-                if (max_diff > static_cast<T>(1e-5)) {
-                    std::cerr << "EDF cell-list validation max rel diff: " << max_diff << std::endl;
-                    std::cerr << "EDF cell-list validation rel diff norm: " << std::sqrt(diff_norm) << std::endl;
-                }
-                std::copy(test.begin(), test.end(), out);
-                return 0;
+
+        if (SSDF_CELL_VALIDATE) {
+            // Just for testing consistency
+            std::vector<T> ref(out, out + npoints);
+            std::vector<T> test(out, out + npoints);
+            edf<G, T, I>(npoints, x, y, z, nselements, s0, s1, s2, nspoints, sx, sy, sz, ref.data());
+            edf_celllist<G, T, I>(npoints, x, y, z, nselements, s0, s1, s2, nspoints, sx, sy, sz, test.data());
+            T max_diff = 0;
+            T diff_norm = 0;
+            for (ptrdiff_t i = 0; i < npoints; ++i) {
+                T rel_diff = std::abs(ref[i] - test[i]) / (std::abs(ref[i]) + 1e-16);
+                max_diff = std::max<T>(max_diff, rel_diff);
+                diff_norm += rel_diff * rel_diff;
             }
+            if (max_diff > static_cast<T>(1e-5)) {
+                std::cerr << "EDF cell-list validation max rel diff: " << max_diff << std::endl;
+                std::cerr << "EDF cell-list validation rel diff norm: " << std::sqrt(diff_norm) << std::endl;
+            }
+            std::copy(test.begin(), test.end(), out);
+            return 0;
+        }
+
+        if (SSDF_USE_CELL_LIST) {
             return edf_celllist<G, T, I>(npoints, x, y, z, nselements, s0, s1, s2, nspoints, sx, sy, sz, out);
         }
         return edf<G, T, I>(npoints, x, y, z, nselements, s0, s1, s2, nspoints, sx, sy, sz, out);
