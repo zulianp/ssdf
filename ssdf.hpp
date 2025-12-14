@@ -495,16 +495,17 @@ namespace ssdf {
         }
 
         const G cell_size = std::max(max_extent, G(1e-12));
-        auto axis_min = [&](int axis) -> G {
-            return (axis == 0) ? gminx : (axis == 1) ? gminy : gminz;
-        };
-        auto axis_span = [&](int axis) -> G {
-            return (axis == 0) ? span_x : (axis == 1) ? span_y : span_z;
-        };
+        const G axis_min0 = (axis0 == 0) ? gminx : (axis0 == 1) ? gminy : gminz;
+        const G axis_min1 = (axis1 == 0) ? gminx : (axis1 == 1) ? gminy : gminz;
+        const G axis_span0 = (axis0 == 0) ? span_x : (axis0 == 1) ? span_y : span_z;
+        const G axis_span1 = (axis1 == 0) ? span_x : (axis1 == 1) ? span_y : span_z;
 
-        const int ncell0 = std::max(1, static_cast<int>(std::ceil(axis_span(axis0) / cell_size)));
-        const int ncell1 = std::max(1, static_cast<int>(std::ceil(axis_span(axis1) / cell_size)));
+        const int ncell0 = std::max(1, static_cast<int>(std::ceil(axis_span0 / cell_size)));
+        const int ncell1 = std::max(1, static_cast<int>(std::ceil(axis_span1 / cell_size)));
         const ptrdiff_t ncells = static_cast<ptrdiff_t>(ncell0) * static_cast<ptrdiff_t>(ncell1);
+
+        const G *tmin_axis0 = (axis0 == 0) ? tminx.data() : (axis0 == 1) ? tminy.data() : tminz.data();
+        const G *tmin_axis1 = (axis1 == 0) ? tminx.data() : (axis1 == 1) ? tminy.data() : tminz.data();
 
         std::vector<int> cell_counts(ncells, 0);
         std::vector<G> cell_minx(ncells, std::numeric_limits<G>::max());
@@ -515,8 +516,8 @@ namespace ssdf {
         std::vector<G> cell_maxz(ncells, std::numeric_limits<G>::lowest());
 
         auto cell_id = [&](G ax0, G ax1) -> ptrdiff_t {
-            int ix = static_cast<int>((ax0 - axis_min(axis0)) / cell_size);
-            int iy = static_cast<int>((ax1 - axis_min(axis1)) / cell_size);
+            int ix = static_cast<int>((ax0 - axis_min0) / cell_size);
+            int iy = static_cast<int>((ax1 - axis_min1) / cell_size);
             ix = std::max(0, std::min(ix, ncell0 - 1));
             iy = std::max(0, std::min(iy, ncell1 - 1));
             return static_cast<ptrdiff_t>(iy) * ncell0 + ix;
@@ -524,8 +525,7 @@ namespace ssdf {
 
         // Count and aggregate cell AABBs
         for (ptrdiff_t i = 0; i < nselements; ++i) {
-            const ptrdiff_t cid = cell_id((axis0 == 0) ? tminx[i] : (axis0 == 1) ? tminy[i] : tminz[i],
-                                          (axis1 == 0) ? tminx[i] : (axis1 == 1) ? tminy[i] : tminz[i]);
+            const ptrdiff_t cid = cell_id(tmin_axis0[i], tmin_axis1[i]);
             cell_counts[cid] += 1;
             cell_minx[cid] = std::min(cell_minx[cid], tminx[i]);
             cell_maxx[cid] = std::max(cell_maxx[cid], tmaxx[i]);
@@ -542,17 +542,12 @@ namespace ssdf {
         std::vector<I> cell_idx(nselements);
         std::vector<ptrdiff_t> fill_ptr = cell_ptr;
         for (ptrdiff_t i = 0; i < nselements; ++i) {
-            const ptrdiff_t cid = cell_id((axis0 == 0) ? tminx[i] : (axis0 == 1) ? tminy[i] : tminz[i],
-                                          (axis1 == 0) ? tminx[i] : (axis1 == 1) ? tminy[i] : tminz[i]);
+            const ptrdiff_t cid = cell_id(tmin_axis0[i], tmin_axis1[i]);
             cell_idx[fill_ptr[cid]++] = static_cast<I>(i);
         }
 
-        auto tri_min_axis = [&](int axis, I tidx) -> G {
-            return (axis == 0) ? tminx[tidx] : (axis == 1) ? tminy[tidx] : tminz[tidx];
-        };
-        auto tri_max_axis = [&](int axis, I tidx) -> G {
-            return (axis == 0) ? tmaxx[tidx] : (axis == 1) ? tmaxy[tidx] : tmaxz[tidx];
-        };
+        const G *sorted_min = (sort_axis == 0) ? tminx.data() : (sort_axis == 1) ? tminy.data() : tminz.data();
+        const G *sorted_max = (sort_axis == 0) ? tmaxx.data() : (sort_axis == 1) ? tmaxy.data() : tmaxz.data();
 
         // Sort per cell on sort_axis and build cumulative maxima
         std::vector<G> cum_max(nselements, G(0));
@@ -561,22 +556,17 @@ namespace ssdf {
             const ptrdiff_t end = cell_ptr[c + 1];
             if (begin == end) continue;
             std::sort(cell_idx.begin() + begin, cell_idx.begin() + end, [&](I a, I b) {
-                return tri_min_axis(sort_axis, a) < tri_min_axis(sort_axis, b);
+                return sorted_min[a] < sorted_min[b];
             });
 
-            G acc = tri_max_axis(sort_axis, cell_idx[begin]);
+            G acc = sorted_max[cell_idx[begin]];
             for (ptrdiff_t i = begin; i < end; ++i) {
-                acc = std::max(acc, tri_max_axis(sort_axis, cell_idx[i]));
+                acc = std::max(acc, sorted_max[cell_idx[i]]);
                 cum_max[i] = acc;
             }
         }
 
-        auto cell_minmax = [&](ptrdiff_t cid) -> std::tuple<G, G, G, G, G, G> {
-            return {cell_minx[cid], cell_maxx[cid], cell_miny[cid], cell_maxy[cid], cell_minz[cid], cell_maxz[cid]};
-        };
-
-        auto cell_dist_sq = [&](G px, G py, G pz, ptrdiff_t cid) -> G {
-            const auto [cminx, cmaxx, cminy, cmaxy, cminz, cmaxz] = cell_minmax(cid);
+        auto cell_dist_sq = [&](G px, G py, G pz, G cminx, G cmaxx, G cminy, G cmaxy, G cminz, G cmaxz) -> G {
             const G dx = (px < cminx) ? (cminx - px) : (px > cmaxx ? px - cmaxx : G(0));
             const G dy = (py < cminy) ? (cminy - py) : (py > cmaxy ? py - cmaxy : G(0));
             const G dz = (pz < cminz) ? (cminz - pz) : (pz > cmaxz ? pz - cmaxz : G(0));
@@ -592,55 +582,73 @@ namespace ssdf {
             // Iterate cells with conservative culling
             for (ptrdiff_t cid = 0; cid < ncells; ++cid) {
                 if (cell_counts[cid] == 0) continue;
-                if (cell_dist_sq(px, py, pz, cid) > best_sq) continue;
+                if (cell_dist_sq(px,
+                                 py,
+                                 pz,
+                                 cell_minx[cid],
+                                 cell_maxx[cid],
+                                 cell_miny[cid],
+                                 cell_maxy[cid],
+                                 cell_minz[cid],
+                                 cell_maxz[cid]) > best_sq) {
+                    continue;
+                }
 
                 const ptrdiff_t begin = cell_ptr[cid];
                 const ptrdiff_t end = cell_ptr[cid + 1];
-                const G pcoord = (sort_axis == 0) ? px : (sort_axis == 1) ? py : pz;
+            const G pcoord = (sort_axis == 0) ? px : (sort_axis == 1) ? py : pz;
 
                 // Binary search on sorted tri mins
                 ptrdiff_t left = begin;
                 ptrdiff_t right = end;
                 while (left < right) {
                     ptrdiff_t mid = (left + right) / 2;
-                    if (tri_min_axis(sort_axis, cell_idx[mid]) < pcoord) {
+                    if (sorted_min[cell_idx[mid]] < pcoord) {
                         left = mid + 1;
                     } else {
                         right = mid;
                     }
                 }
 
-                // Scan left
-                for (ptrdiff_t i = (left > begin ? left - 1 : begin); i >= begin; --i) {
-                    const G span = pcoord - tri_min_axis(sort_axis, cell_idx[i]);
-                    if (span * span > best_sq && tri_min_axis(sort_axis, cell_idx[i]) > pcoord) break;
-
+                // Scan left (reference logic)
+                if (begin < end) {
+                    ptrdiff_t i = (left > begin) ? left - 1 : begin;
+                    for (;; --i) {
                     const I tid = cell_idx[i];
-                    if (!aabb_can_improve<T>(px,
-                                             py,
-                                             pz,
-                                             best_sq,
-                                             tminx[tid],
-                                             tmaxx[tid],
-                                             tminy[tid],
-                                             tmaxy[tid],
-                                             tminz[tid],
-                                             tmaxz[tid])) {
-                        continue;
-                    }
+                    const G cum_margin = pcoord - cum_max[i];
+                    if (cum_margin * cum_margin > best_sq) break;
 
-                    const I i0 = s0[tid], i1 = s1[tid], i2 = s2[tid];
-                    const G dist_sq = point_triangle_dist_sq(px, py, pz, sx[i0], sy[i0], sz[i0], sx[i1], sy[i1], sz[i1], sx[i2], sy[i2], sz[i2]);
-                    if (dist_sq < best_sq) best_sq = dist_sq;
-                    if (i == begin) break;
+                    const G span = pcoord - sorted_max[tid];
+                        if (span * span > best_sq) {
+                            if (i == begin) break;
+                            continue;
+                        }
+
+                        if (aabb_can_improve<T>(px,
+                                                py,
+                                                pz,
+                                                best_sq,
+                                                tminx[tid],
+                                                tmaxx[tid],
+                                                tminy[tid],
+                                                tmaxy[tid],
+                                                tminz[tid],
+                                                tmaxz[tid])) {
+                            const I i0 = s0[tid], i1 = s1[tid], i2 = s2[tid];
+                            const G dist_sq = point_triangle_dist_sq(px, py, pz, sx[i0], sy[i0], sz[i0], sx[i1], sy[i1], sz[i1], sx[i2], sy[i2], sz[i2]);
+                            if (dist_sq < best_sq) best_sq = dist_sq;
+                        }
+
+                        if (i == begin) break;
+                    }
                 }
 
-                // Scan right
+                // Scan right (reference logic)
                 for (ptrdiff_t i = left; i < end; ++i) {
-                    const G span = tri_min_axis(sort_axis, cell_idx[i]) - pcoord;
-                    if (span * span > best_sq && cum_max[i] - pcoord > std::sqrt(best_sq)) break;
-
                     const I tid = cell_idx[i];
+                    const G margin = sorted_min[tid] - pcoord;
+                    if (margin * margin > best_sq) break;
+
                     if (!aabb_can_improve<T>(px,
                                              py,
                                              pz,
