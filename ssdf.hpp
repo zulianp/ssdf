@@ -218,6 +218,7 @@ namespace ssdf {
             const G *const SSDF_RESTRICT sz,
             T *const SSDF_RESTRICT out) {
         SSDF_TIMER(total);
+        if (nselements == 0 || nspoints == 0) return 0;
         // Allocate AABB arrays
         T *surf_minx = new T[nselements];
         T *surf_miny = new T[nselements];
@@ -298,12 +299,13 @@ namespace ssdf {
                 T best_sq = out[p] * out[p];
 
                 // Binary search for insertion point
-                ptrdiff_t left = std::lower_bound(cum_max, cum_max + nselements, pcoord) - cum_max;
+                // ptrdiff_t left = std::lower_bound(cum_max, cum_max + nselements, pcoord) - cum_max;
+                ptrdiff_t left = std::lower_bound(surf_min, surf_min + nselements, pcoord) - surf_min;
 
                 // Check elements to the left
                 for (ptrdiff_t i = (left > 0 ? left - 1 : 0); i >= 0; i--) {
                     const T margin = pcoord - cum_max[i];
-                    if (margin * margin >= best_sq) break;
+                    if (margin >= T(0) && margin * margin >= best_sq) break;
                     // const T span = pcoord - surf_max[i];
                     // if (span * span > best_sq) continue;
 
@@ -333,7 +335,7 @@ namespace ssdf {
                 // Check elements to the right
                 for (ptrdiff_t i = left; i < nselements; i++) {
                     const T margin = surf_min[i] - pcoord;
-                    if (margin * margin >= best_sq) break;
+                    if (margin >= T(0) && margin * margin >= best_sq) break;
 
                     const I orig_idx = sort_idx[i];
 
@@ -496,7 +498,7 @@ namespace ssdf {
             }
         }
 
-        const G cell_size = std::max(max_extent, G(1e-12));
+        const G cell_size = std::max(max_extent, G(1e-8));
         const G axis_min0 = (axis0 == 0) ? gminx : (axis0 == 1) ? gminy : gminz;
         const G axis_min1 = (axis1 == 0) ? gminx : (axis1 == 1) ? gminy : gminz;
         const G axis_span0 = (axis0 == 0) ? span_x : (axis0 == 1) ? span_y : span_z;
@@ -612,12 +614,13 @@ namespace ssdf {
                 const ptrdiff_t begin = cell_ptr[cid];
                 const ptrdiff_t end = cell_ptr[cid + 1];
                 const G pcoord = (sort_axis == 0) ? px : (sort_axis == 1) ? py : pz;
-                const ptrdiff_t left = std::lower_bound(cum_max.data() + begin, cum_max.data() + end, pcoord) - cum_max.data();
+                // const ptrdiff_t left = std::lower_bound(cum_max.data() + begin, cum_max.data() + end, pcoord) - cum_max.data();
+                const ptrdiff_t left = std::lower_bound(sorted_min + begin, sorted_min + end, pcoord) - sorted_min;
 
                 // Scan left
                 for (ptrdiff_t i = (left > begin) ? left - 1 : begin; i >= begin; --i) {
                     const G margin = pcoord - cum_max[i];
-                    if (margin * margin >= best_sq) break;
+                    if (margin >= G(0) && margin * margin >= best_sq) break;
 
                     if (aabb_can_improve<T>(
                             px, py, pz, best_sq, tminx[i], tmaxx[i], tminy[i], tmaxy[i], tminz[i], tmaxz[i])) {
@@ -632,7 +635,7 @@ namespace ssdf {
                 // Scan right
                 for (ptrdiff_t i = left; i < end; ++i) {
                     const G margin = sorted_min[i] - pcoord;
-                    if (margin * margin >= best_sq) break;
+                    if (margin >= G(0) && margin * margin >= best_sq) break;
 
                     if (!aabb_can_improve<T>(
                             px, py, pz, best_sq, tminx[i], tmaxx[i], tminy[i], tmaxy[i], tminz[i], tmaxz[i])) {
@@ -678,11 +681,15 @@ namespace ssdf {
                 edf<G, T, I>(npoints, x, y, z, nselements, s0, s1, s2, nspoints, sx, sy, sz, ref.data());
                 edf_celllist<G, T, I>(npoints, x, y, z, nselements, s0, s1, s2, nspoints, sx, sy, sz, test.data());
                 T max_diff = 0;
+                T diff_norm = 0;
                 for (ptrdiff_t i = 0; i < npoints; ++i) {
-                    max_diff = std::max<T>(max_diff, std::abs(ref[i] - test[i]));
+                    T rel_diff = std::abs(ref[i] - test[i]) / (std::abs(ref[i]) + 1e-16);
+                    max_diff = std::max<T>(max_diff, rel_diff);
+                    diff_norm += rel_diff * rel_diff;
                 }
                 if (max_diff > static_cast<T>(1e-5)) {
-                    std::cerr << "EDF cell-list validation max diff: " << max_diff << std::endl;
+                    std::cerr << "EDF cell-list validation max rel diff: " << max_diff << std::endl;
+                    std::cerr << "EDF cell-list validation rel diff norm: " << std::sqrt(diff_norm) << std::endl;
                 }
                 std::copy(test.begin(), test.end(), out);
                 return 0;

@@ -155,6 +155,12 @@ target_link_libraries(ssdf_test PRIVATE ssdf)
 # Add test to CTest
 add_test(NAME ssdf_basic_test COMMAND ssdf_test)
 
+
+add_executable(ssdf_brute_force_test tests/ssdf_brute_force_test.cpp)
+target_link_libraries(ssdf_brute_force_test PRIVATE ssdf)
+
+add_test(NAME ssdf_brute_force_test COMMAND ssdf_brute_force_test)
+
 # SDF executable
 add_executable(sdf_exe sdf.exe.cpp)
 target_link_libraries(sdf_exe PRIVATE ssdf)
