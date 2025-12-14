@@ -157,31 +157,30 @@ namespace ssdf {
     inline static bool aabb_can_improve(const T px,
                                         const T py,
                                         const T pz,
-                                        const T best_dist_sq,
+                                        const T best_sq,
                                         const T minx,
                                         const T maxx,
                                         const T miny,
                                         const T maxy,
                                         const T minz,
                                         const T maxz) {
-        const T dxmin = px - minx;
-        const T dxmax = px - maxx;
-        const T dymin = py - miny;
-        const T dymax = py - maxy;
-        const T dzmin = pz - minz;
-        const T dzmax = pz - maxz;
-        const T dx = MIN(dxmin * dxmin, dxmax * dxmax);
-        const T dy = MIN(dymin * dymin, dymax * dymax);
-        const T dz = MIN(dzmin * dzmin, dzmax * dzmax);
-        const T dist_sq = dx + dy + dz;
-        return dist_sq < best_dist_sq ||
-               (dxmin >= 0 && dxmax <= 0 && dymin >= 0 && dymax <= 0 && dzmin >= 0 && dzmax <= 0);
+        // const T dxmin = px - minx;
+        // const T dxmax = px - maxx;
+        // const T dymin = py - miny;
+        // const T dymax = py - maxy;
+        // const T dzmin = pz - minz;
+        // const T dzmax = pz - maxz;
+        // const T dx = MIN(dxmin * dxmin, dxmax * dxmax);
+        // const T dy = MIN(dymin * dymin, dymax * dymax);
+        // const T dz = MIN(dzmin * dzmin, dzmax * dzmax);
+        // const T dist_sq = dx + dy + dz;
+        // return dist_sq < best_sq ||
+        //        (dxmin >= 0 && dxmax <= 0 && dymin >= 0 && dymax <= 0 && dzmin >= 0 && dzmax <= 0);
 
-
-        // const T dx = (px < minx) ? (minx - px) : (px > maxx ? px - maxx : T(0));
-        // const T dy = (py < miny) ? (miny - py) : (py > maxy ? py - maxy : T(0));
-        // const T dz = (pz < minz) ? (minz - pz) : (pz > maxz ? pz - maxz : T(0));
-        // return dx * dx + dy * dy + dz * dz < best_dist_sq;
+        const T dx = (px < minx) ? (minx - px) : (px > maxx ? px - maxx : T(0));
+        const T dy = (py < miny) ? (miny - py) : (py > maxy ? py - maxy : T(0));
+        const T dz = (pz < minz) ? (minz - pz) : (pz > maxz ? pz - maxz : T(0));
+        return dx * dx + dy * dy + dz * dz < best_sq;
     }
 
     /**
@@ -296,83 +295,71 @@ namespace ssdf {
             for (ptrdiff_t p = 0; p < npoints; p++) {
                 const G px = x[p], py = y[p], pz = z[p];
                 const T pcoord = pnt_coord[p];
-                T best_dist_sq = out[p] * out[p];
+                T best_sq = out[p] * out[p];
 
                 // Binary search for insertion point
-                ptrdiff_t left = std::lower_bound(surf_min, surf_min + nselements, pcoord) - surf_min;
+                ptrdiff_t left = std::lower_bound(cum_max, cum_max + nselements, pcoord) - cum_max;
 
                 // Check elements to the left
-                {
-                    ptrdiff_t start = (left > 0 ? left - 1 : 0);
-                    ptrdiff_t i = start;
+                for (ptrdiff_t i = (left > 0 ? left - 1 : 0); i >= 0; i--) {
+                    const T margin = pcoord - cum_max[i];
+                    if (margin * margin >= best_sq) break;
+                    // const T span = pcoord - surf_max[i];
+                    // if (span * span > best_sq) continue;
 
-                    for (; i >= 0; i--) {
-                        const T margin = pcoord - cum_max[i];
-                        if (margin * margin > best_dist_sq) break;
-                        const T span = pcoord - surf_max[i];
-                        if (span * span > best_dist_sq) continue;
+                    const I orig_idx = sort_idx[i];
+                    const I i0 = s0[orig_idx], i1 = s1[orig_idx], i2 = s2[orig_idx];
+                    const G tx0 = sx[i0], tx1 = sx[i1], tx2 = sx[i2];
+                    const G ty0 = sy[i0], ty1 = sy[i1], ty2 = sy[i2];
+                    const G tz0 = sz[i0], tz1 = sz[i1], tz2 = sz[i2];
 
-                        const I orig_idx = sort_idx[i];
-                        const I i0 = s0[orig_idx], i1 = s1[orig_idx], i2 = s2[orig_idx];
-                        const G tx0 = sx[i0], tx1 = sx[i1], tx2 = sx[i2];
-                        const G ty0 = sy[i0], ty1 = sy[i1], ty2 = sy[i2];
-                        const G tz0 = sz[i0], tz1 = sz[i1], tz2 = sz[i2];
-
-                        if (!aabb_can_improve<T>(px,
-                                                 py,
-                                                 pz,
-                                                 best_dist_sq,
-                                                 std::min({tx0, tx1, tx2}),
-                                                 std::max({tx0, tx1, tx2}),
-                                                 std::min({ty0, ty1, ty2}),
-                                                 std::max({ty0, ty1, ty2}),
-                                                 std::min({tz0, tz1, tz2}),
-                                                 std::max({tz0, tz1, tz2}))) {
-                            continue;
-                        }
-
-                        const T dist_sq =
-                            point_triangle_dist_sq(px, py, pz, tx0, ty0, tz0, tx1, ty1, tz1, tx2, ty2, tz2);
-                        best_dist_sq = std::min(best_dist_sq, dist_sq);
+                    if (!aabb_can_improve<T>(px,
+                                             py,
+                                             pz,
+                                             best_sq,
+                                             std::min({tx0, tx1, tx2}),
+                                             std::max({tx0, tx1, tx2}),
+                                             std::min({ty0, ty1, ty2}),
+                                             std::max({ty0, ty1, ty2}),
+                                             std::min({tz0, tz1, tz2}),
+                                             std::max({tz0, tz1, tz2}))) {
+                        continue;
                     }
+
+                    const T dist_sq = point_triangle_dist_sq(px, py, pz, tx0, ty0, tz0, tx1, ty1, tz1, tx2, ty2, tz2);
+                    best_sq = std::min(best_sq, dist_sq);
                 }
 
                 // Check elements to the right
-                {
-                    ptrdiff_t i = left;
-                    ptrdiff_t end = nselements;
-                    // Handle remainder (scalar)
-                    for (; i < end; i++) {
-                        const T margin = surf_min[i] - pcoord;
-                        if (margin * margin > best_dist_sq) break;
+                for (ptrdiff_t i = left; i < nselements; i++) {
+                    const T margin = surf_min[i] - pcoord;
+                    if (margin * margin >= best_sq) break;
 
-                        const I orig_idx = sort_idx[i];
+                    const I orig_idx = sort_idx[i];
 
-                        const I i0 = s0[orig_idx], i1 = s1[orig_idx], i2 = s2[orig_idx];
-                        const G tx0 = sx[i0], tx1 = sx[i1], tx2 = sx[i2];
-                        const G ty0 = sy[i0], ty1 = sy[i1], ty2 = sy[i2];
-                        const G tz0 = sz[i0], tz1 = sz[i1], tz2 = sz[i2];
+                    const I i0 = s0[orig_idx], i1 = s1[orig_idx], i2 = s2[orig_idx];
+                    const G tx0 = sx[i0], tx1 = sx[i1], tx2 = sx[i2];
+                    const G ty0 = sy[i0], ty1 = sy[i1], ty2 = sy[i2];
+                    const G tz0 = sz[i0], tz1 = sz[i1], tz2 = sz[i2];
 
-                        if (!aabb_can_improve<T>(px,
-                                                 py,
-                                                 pz,
-                                                 best_dist_sq,
-                                                 std::min({tx0, tx1, tx2}),
-                                                 std::max({tx0, tx1, tx2}),
-                                                 std::min({ty0, ty1, ty2}),
-                                                 std::max({ty0, ty1, ty2}),
-                                                 std::min({tz0, tz1, tz2}),
-                                                 std::max({tz0, tz1, tz2}))) {
-                            continue;
-                        }
-
-                        const T dist_sq =
-                            point_triangle_dist_sq(px, py, pz, tx0, ty0, tz0, tx1, ty1, tz1, tx2, ty2, tz2);
-                        best_dist_sq = std::min(best_dist_sq, dist_sq);
+                    if (!aabb_can_improve<T>(px,
+                                             py,
+                                             pz,
+                                             best_sq,
+                                             std::min({tx0, tx1, tx2}),
+                                             std::max({tx0, tx1, tx2}),
+                                             std::min({ty0, ty1, ty2}),
+                                             std::max({ty0, ty1, ty2}),
+                                             std::min({tz0, tz1, tz2}),
+                                             std::max({tz0, tz1, tz2}))) {
+                        continue;
                     }
+
+                    const T dist_sq = point_triangle_dist_sq(px, py, pz, tx0, ty0, tz0, tx1, ty1, tz1, tx2, ty2, tz2);
+                    best_sq = std::min(best_sq, dist_sq);
                 }
 
-                out[p] = std::sqrt(best_dist_sq);
+                out[p] = std::sqrt(best_sq);
             }
         }
 
@@ -601,13 +588,6 @@ namespace ssdf {
             }
         }
 
-        auto cell_dist_sq = [&](G px, G py, G pz, G cminx, G cmaxx, G cminy, G cmaxy, G cminz, G cmaxz) -> G {
-            const G dx = (px < cminx) ? (cminx - px) : (px > cmaxx ? px - cmaxx : G(0));
-            const G dy = (py < cminy) ? (cminy - py) : (py > cmaxy ? py - cmaxy : G(0));
-            const G dz = (pz < cminz) ? (cminz - pz) : (pz > cmaxz ? pz - cmaxz : G(0));
-            return dx * dx + dy * dy + dz * dz;
-        };
-
         // Query points
 #pragma omp parallel for
         for (ptrdiff_t p = 0; p < npoints; ++p) {
@@ -616,59 +596,28 @@ namespace ssdf {
 
             // Iterate cells with conservative culling
             for (ptrdiff_t cid = 0; cid < ncells; ++cid) {
-                if (cell_counts[cid] == 0) continue;
-                if (cell_dist_sq(px,
-                                 py,
-                                 pz,
-                                 cell_minx[cid],
-                                 cell_maxx[cid],
-                                 cell_miny[cid],
-                                 cell_maxy[cid],
-                                 cell_minz[cid],
-                                 cell_maxz[cid]) > best_sq) {
+                if (cell_counts[cid] == 0 || !aabb_can_improve<T>(px,
+                                                                  py,
+                                                                  pz,
+                                                                  best_sq,
+                                                                  cell_minx[cid],
+                                                                  cell_maxx[cid],
+                                                                  cell_miny[cid],
+                                                                  cell_maxy[cid],
+                                                                  cell_minz[cid],
+                                                                  cell_maxz[cid])) {
                     continue;
                 }
-
-                // Why this is not equivalent to cell_dist_sq ? 
-                // if (cell_counts[cid] == 0 || !aabb_can_improve<T>(px,
-                //                                                   py,
-                //                                                   pz,
-                //                                                   best_sq,
-                //                                                   cell_minx[cid],
-                //                                                   cell_maxx[cid],
-                //                                                   cell_miny[cid],
-                //                                                   cell_maxy[cid],
-                //                                                   cell_minz[cid],
-                //                                                   cell_maxz[cid])) {
-                //     continue;
-                // }
 
                 const ptrdiff_t begin = cell_ptr[cid];
                 const ptrdiff_t end = cell_ptr[cid + 1];
                 const G pcoord = (sort_axis == 0) ? px : (sort_axis == 1) ? py : pz;
+                const ptrdiff_t left = std::lower_bound(cum_max.data() + begin, cum_max.data() + end, pcoord) - cum_max.data();
 
-                // Binary search on sorted tri mins
-                ptrdiff_t left = begin;
-                ptrdiff_t right = end;
-                while (left < right) {
-                    ptrdiff_t mid = (left + right) / 2;
-                    if (sorted_min[mid] < pcoord) {
-                        left = mid + 1;
-                    } else {
-                        right = mid;
-                    }
-                }
-
-                // Scan left (reference logic)
-                for (ptrdiff_t i = (left > begin) ? left - 1 : begin; i > begin; --i) {
-                    const G cum_margin = pcoord - cum_max[i];
-                    if (cum_margin * cum_margin > best_sq) break;
-
-                    const G span = pcoord - sorted_max[i];
-                    if (span * span > best_sq) {
-                        if (i == begin) break;
-                        continue;
-                    }
+                // Scan left
+                for (ptrdiff_t i = (left > begin) ? left - 1 : begin; i >= begin; --i) {
+                    const G margin = pcoord - cum_max[i];
+                    if (margin * margin >= best_sq) break;
 
                     if (aabb_can_improve<T>(
                             px, py, pz, best_sq, tminx[i], tmaxx[i], tminy[i], tmaxy[i], tminz[i], tmaxz[i])) {
@@ -676,14 +625,14 @@ namespace ssdf {
                         const I i0 = s0[tid], i1 = s1[tid], i2 = s2[tid];
                         const G dist_sq = point_triangle_dist_sq(
                             px, py, pz, sx[i0], sy[i0], sz[i0], sx[i1], sy[i1], sz[i1], sx[i2], sy[i2], sz[i2]);
-                        if (dist_sq < best_sq) best_sq = dist_sq;
+                        best_sq = std::min(best_sq, dist_sq);
                     }
                 }
 
-                // Scan right (reference logic)
+                // Scan right
                 for (ptrdiff_t i = left; i < end; ++i) {
                     const G margin = sorted_min[i] - pcoord;
-                    if (margin * margin > best_sq) break;
+                    if (margin * margin >= best_sq) break;
 
                     if (!aabb_can_improve<T>(
                             px, py, pz, best_sq, tminx[i], tmaxx[i], tminy[i], tmaxy[i], tminz[i], tmaxz[i])) {
