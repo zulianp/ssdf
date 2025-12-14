@@ -18,11 +18,11 @@ namespace ssdf {
 
         inline BarrierTimer(MPI_Comm comm, const std::string &name) : comm(comm), name(name) {
             MPI_Barrier(comm);
-            start_time = time_ms();
+            start_time = MPI_Wtime();
         }
 
         inline ~BarrierTimer() {
-            end_time = time_ms();
+            end_time = MPI_Wtime();
 
             int rank, size;
             MPI_Comm_rank(comm, &rank);
@@ -49,7 +49,7 @@ namespace ssdf {
                 }
                 avg /= size;
 
-                printf("%s: overall %g [ms], avg %g [ms]\n", name.c_str(), end - begin, avg);
+                printf("%s: overall %g [s], avg %g [s]\n", name.c_str(), end - begin, avg);
             } else {
                 MPI_Gather(times, 2, MPI_DOUBLE, nullptr, 0, MPI_DOUBLE, 0, comm);
             }
