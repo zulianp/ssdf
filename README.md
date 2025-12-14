@@ -82,9 +82,12 @@ Cite SSDF if you use it for your work:
 
 ## Using the CPU SDF (edf)
 
-- API: `ssdf::edf<G,T,I>(npoints, x, y, z, nselements, s0, s1, s2, nspoints, sx, sy, sz, out)`.
+- API: `ssdf::edf<G,T,I>(...)` (classic), `ssdf::edf_celllist<G,T,I>(...)` (cell-grid variant), or `ssdf::edf_select<G,T,I>(...)` to dispatch between them via env flags.
 - Inputs: point SoA `(x,y,z)`, surface vertex SoA `(sx,sy,sz)`, triangle indices `(s0,s1,s2)`.
 - Output: `out[i]` is the (unsigned) distance from point i to the surface.
+- High-performance path: set env `SSDF_USE_CELL_LIST=1` to use the cell-grid EDF variant; keep default unset for the classic path.
+- Cell-list variant performs much better for updating the edf (measured 6x faster for)
+- Optional validation: set `SSDF_CELL_VALIDATE=1` alongside `SSDF_USE_CELL_LIST` to run both paths and report max difference (copies the cell-list result to `out`).
 - Binary driver: `sdf_exe <surf_folder> <points_folder> <output_file>`
   - `surf_folder`: `x.raw,y.raw,z.raw` (float), `i0.raw,i1.raw,i2.raw` (int)
   - `points_folder`: `x.raw,y.raw,z.raw` (float)
@@ -92,8 +95,9 @@ Cite SSDF if you use it for your work:
 
 ## Using the MPI SDF (pedf)
 
-- API: `ssdf::pedf<G,T,I>(comm, lnpoints, x, y, z, lnselements, s0, s1, s2, lnspoints, sx, sy, sz, out, use_allgather=true)`.
+- API: `ssdf::pedf<G,T,I>(comm, lnpoints, x, y, z, lnselements, s0, s1, s2, lnspoints, sx, sy, sz, out)`.
 - Data distribution: points and surface are partitioned across ranks.
+- Uses the same EDF backend selector as the CPU path (`SSDF_USE_CELL_LIST`, `SSDF_CELL_VALIDATE` envs).
 - Binary driver: `psdf_exe <surf_folder> <points_folder> <output_file>`
   - Reads SoA `x.raw,y.raw,z.raw` and `i0.raw,i1.raw,i2.raw` via `MPI_File_read_at_all`
   - Writes distributed output with `MPI_File_write_at_all`
@@ -106,3 +110,4 @@ In order to save computational time only compute for what matters
 
 1) Compute the edf for the fluid domain keep the `edf` untouched for the rest of the simulation
 2) Create a new array copy of `edf` update it with the current deformed structural surface
+   <!-- - In parallel `ssdf::pedf_update<G,T,I>` takes advantage of the existing distance for early pruning -->

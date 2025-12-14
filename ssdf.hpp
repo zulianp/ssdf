@@ -7,8 +7,10 @@
 #include <cmath>
 #include <cstring>
 #include <iostream>
+#include <tuple>
 #include <limits>
 #include <string>
+#include <vector>
 
 #ifndef SSDF_READ_ENV
 #define SSDF_READ_ENV(name, conversion) \
@@ -381,6 +383,327 @@ namespace ssdf {
         return 0;
     }
 
+
+    // High-performance EDF using a 2D cell grid + sorted dimension
+    template <typename G, typename T, typename I>
+    int edf_celllist(const ptrdiff_t npoints,
+                     const G *const SSDF_RESTRICT x,
+                     const G *const SSDF_RESTRICT y,
+                     const G *const SSDF_RESTRICT z,
+                     const ptrdiff_t nselements,
+                     const I *const SSDF_RESTRICT s0,
+                     const I *const SSDF_RESTRICT s1,
+                     const I *const SSDF_RESTRICT s2,
+                     const ptrdiff_t nspoints,
+                     const G *const SSDF_RESTRICT sx,
+                     const G *const SSDF_RESTRICT sy,
+                     const G *const SSDF_RESTRICT sz,
+                     T *const SSDF_RESTRICT out) {
+        SSDF_TIMER(edf_celllist);
+        if (nselements == 0 || nspoints == 0) return 0;
+
+        // Triangle AABBs
+        std::vector<G> tminx(nselements), tminy(nselements), tminz(nselements);
+        std::vector<G> tmaxx(nselements), tmaxy(nselements), tmaxz(nselements);
+
+        G gminx = std::numeric_limits<G>::max(), gminy = std::numeric_limits<G>::max(), gminz = std::numeric_limits<G>::max();
+        G gmaxx = std::numeric_limits<G>::lowest(), gmaxy = std::numeric_limits<G>::lowest(),
+          gmaxz = std::numeric_limits<G>::lowest();
+        G max_extent = G(0);
+
+#pragma omp parallel
+        {
+            G lminx = std::numeric_limits<G>::max(), lminy = std::numeric_limits<G>::max(), lminz = std::numeric_limits<G>::max();
+            G lmaxx = std::numeric_limits<G>::lowest(), lmaxy = std::numeric_limits<G>::lowest(),
+              lmaxz = std::numeric_limits<G>::lowest();
+            G lextent = G(0);
+#pragma omp for nowait
+            for (ptrdiff_t i = 0; i < nselements; ++i) {
+                const I i0 = s0[i], i1 = s1[i], i2 = s2[i];
+                const G x0 = sx[i0], x1 = sx[i1], x2 = sx[i2];
+                const G y0 = sy[i0], y1 = sy[i1], y2 = sy[i2];
+                const G z0 = sz[i0], z1 = sz[i1], z2 = sz[i2];
+
+                const G xmin = std::min({x0, x1, x2});
+                const G xmax = std::max({x0, x1, x2});
+                const G ymin = std::min({y0, y1, y2});
+                const G ymax = std::max({y0, y1, y2});
+                const G zmin = std::min({z0, z1, z2});
+                const G zmax = std::max({z0, z1, z2});
+
+                tminx[i] = xmin;
+                tmaxx[i] = xmax;
+                tminy[i] = ymin;
+                tmaxy[i] = ymax;
+                tminz[i] = zmin;
+                tmaxz[i] = zmax;
+
+                lminx = std::min(lminx, xmin);
+                lmaxx = std::max(lmaxx, xmax);
+                lminy = std::min(lminy, ymin);
+                lmaxy = std::max(lmaxy, ymax);
+                lminz = std::min(lminz, zmin);
+                lmaxz = std::max(lmaxz, zmax);
+                lextent = std::max(lextent, std::max({xmax - xmin, ymax - ymin, zmax - zmin}));
+            }
+#pragma omp critical
+            {
+                gminx = std::min(gminx, lminx);
+                gmaxx = std::max(gmaxx, lmaxx);
+                gminy = std::min(gminy, lminy);
+                gmaxy = std::max(gmaxy, lmaxy);
+                gminz = std::min(gminz, lminz);
+                gmaxz = std::max(gmaxz, lmaxz);
+                max_extent = std::max(max_extent, lextent);
+            }
+        }
+
+        // Choose grid axes: two widest spans
+        const G span_x = gmaxx - gminx;
+        const G span_y = gmaxy - gminy;
+        const G span_z = gmaxz - gminz;
+        int axis0 = 0, axis1 = 1, sort_axis = 2;
+        {
+            if (span_x >= span_y && span_x >= span_z) {
+                axis0 = 0;
+                if (span_y >= span_z) {
+                    axis1 = 1;
+                    sort_axis = 2;
+                } else {
+                    axis1 = 2;
+                    sort_axis = 1;
+                }
+            } else if (span_y >= span_x && span_y >= span_z) {
+                axis0 = 1;
+                if (span_x >= span_z) {
+                    axis1 = 0;
+                    sort_axis = 2;
+                } else {
+                    axis1 = 2;
+                    sort_axis = 0;
+                }
+            } else {
+                axis0 = 2;
+                if (span_x >= span_y) {
+                    axis1 = 0;
+                    sort_axis = 1;
+                } else {
+                    axis1 = 1;
+                    sort_axis = 0;
+                }
+            }
+        }
+
+        const G cell_size = std::max(max_extent, G(1e-12));
+        auto axis_min = [&](int axis) -> G {
+            return (axis == 0) ? gminx : (axis == 1) ? gminy : gminz;
+        };
+        auto axis_span = [&](int axis) -> G {
+            return (axis == 0) ? span_x : (axis == 1) ? span_y : span_z;
+        };
+
+        const int ncell0 = std::max(1, static_cast<int>(std::ceil(axis_span(axis0) / cell_size)));
+        const int ncell1 = std::max(1, static_cast<int>(std::ceil(axis_span(axis1) / cell_size)));
+        const ptrdiff_t ncells = static_cast<ptrdiff_t>(ncell0) * static_cast<ptrdiff_t>(ncell1);
+
+        std::vector<int> cell_counts(ncells, 0);
+        std::vector<G> cell_minx(ncells, std::numeric_limits<G>::max());
+        std::vector<G> cell_miny(ncells, std::numeric_limits<G>::max());
+        std::vector<G> cell_minz(ncells, std::numeric_limits<G>::max());
+        std::vector<G> cell_maxx(ncells, std::numeric_limits<G>::lowest());
+        std::vector<G> cell_maxy(ncells, std::numeric_limits<G>::lowest());
+        std::vector<G> cell_maxz(ncells, std::numeric_limits<G>::lowest());
+
+        auto cell_id = [&](G ax0, G ax1) -> ptrdiff_t {
+            int ix = static_cast<int>((ax0 - axis_min(axis0)) / cell_size);
+            int iy = static_cast<int>((ax1 - axis_min(axis1)) / cell_size);
+            ix = std::max(0, std::min(ix, ncell0 - 1));
+            iy = std::max(0, std::min(iy, ncell1 - 1));
+            return static_cast<ptrdiff_t>(iy) * ncell0 + ix;
+        };
+
+        // Count and aggregate cell AABBs
+        for (ptrdiff_t i = 0; i < nselements; ++i) {
+            const ptrdiff_t cid = cell_id((axis0 == 0) ? tminx[i] : (axis0 == 1) ? tminy[i] : tminz[i],
+                                          (axis1 == 0) ? tminx[i] : (axis1 == 1) ? tminy[i] : tminz[i]);
+            cell_counts[cid] += 1;
+            cell_minx[cid] = std::min(cell_minx[cid], tminx[i]);
+            cell_maxx[cid] = std::max(cell_maxx[cid], tmaxx[i]);
+            cell_miny[cid] = std::min(cell_miny[cid], tminy[i]);
+            cell_maxy[cid] = std::max(cell_maxy[cid], tmaxy[i]);
+            cell_minz[cid] = std::min(cell_minz[cid], tminz[i]);
+            cell_maxz[cid] = std::max(cell_maxz[cid], tmaxz[i]);
+        }
+
+        // Prefix sums
+        std::vector<ptrdiff_t> cell_ptr(ncells + 1, 0);
+        for (ptrdiff_t c = 0; c < ncells; ++c) cell_ptr[c + 1] = cell_ptr[c] + cell_counts[c];
+
+        std::vector<I> cell_idx(nselements);
+        std::vector<ptrdiff_t> fill_ptr = cell_ptr;
+        for (ptrdiff_t i = 0; i < nselements; ++i) {
+            const ptrdiff_t cid = cell_id((axis0 == 0) ? tminx[i] : (axis0 == 1) ? tminy[i] : tminz[i],
+                                          (axis1 == 0) ? tminx[i] : (axis1 == 1) ? tminy[i] : tminz[i]);
+            cell_idx[fill_ptr[cid]++] = static_cast<I>(i);
+        }
+
+        auto tri_min_axis = [&](int axis, I tidx) -> G {
+            return (axis == 0) ? tminx[tidx] : (axis == 1) ? tminy[tidx] : tminz[tidx];
+        };
+        auto tri_max_axis = [&](int axis, I tidx) -> G {
+            return (axis == 0) ? tmaxx[tidx] : (axis == 1) ? tmaxy[tidx] : tmaxz[tidx];
+        };
+
+        // Sort per cell on sort_axis and build cumulative maxima
+        std::vector<G> cum_max(nselements, G(0));
+        for (ptrdiff_t c = 0; c < ncells; ++c) {
+            const ptrdiff_t begin = cell_ptr[c];
+            const ptrdiff_t end = cell_ptr[c + 1];
+            if (begin == end) continue;
+            std::sort(cell_idx.begin() + begin, cell_idx.begin() + end, [&](I a, I b) {
+                return tri_min_axis(sort_axis, a) < tri_min_axis(sort_axis, b);
+            });
+
+            G acc = tri_max_axis(sort_axis, cell_idx[begin]);
+            for (ptrdiff_t i = begin; i < end; ++i) {
+                acc = std::max(acc, tri_max_axis(sort_axis, cell_idx[i]));
+                cum_max[i] = acc;
+            }
+        }
+
+        auto cell_minmax = [&](ptrdiff_t cid) -> std::tuple<G, G, G, G, G, G> {
+            return {cell_minx[cid], cell_maxx[cid], cell_miny[cid], cell_maxy[cid], cell_minz[cid], cell_maxz[cid]};
+        };
+
+        auto cell_dist_sq = [&](G px, G py, G pz, ptrdiff_t cid) -> G {
+            const auto [cminx, cmaxx, cminy, cmaxy, cminz, cmaxz] = cell_minmax(cid);
+            const G dx = (px < cminx) ? (cminx - px) : (px > cmaxx ? px - cmaxx : G(0));
+            const G dy = (py < cminy) ? (cminy - py) : (py > cmaxy ? py - cmaxy : G(0));
+            const G dz = (pz < cminz) ? (cminz - pz) : (pz > cmaxz ? pz - cmaxz : G(0));
+            return dx * dx + dy * dy + dz * dz;
+        };
+
+        // Query points
+#pragma omp parallel for
+        for (ptrdiff_t p = 0; p < npoints; ++p) {
+            const G px = x[p], py = y[p], pz = z[p];
+            T best_sq = out[p] * out[p];
+
+            // Iterate cells with conservative culling
+            for (ptrdiff_t cid = 0; cid < ncells; ++cid) {
+                if (cell_counts[cid] == 0) continue;
+                if (cell_dist_sq(px, py, pz, cid) > best_sq) continue;
+
+                const ptrdiff_t begin = cell_ptr[cid];
+                const ptrdiff_t end = cell_ptr[cid + 1];
+                const G pcoord = (sort_axis == 0) ? px : (sort_axis == 1) ? py : pz;
+
+                // Binary search on sorted tri mins
+                ptrdiff_t left = begin;
+                ptrdiff_t right = end;
+                while (left < right) {
+                    ptrdiff_t mid = (left + right) / 2;
+                    if (tri_min_axis(sort_axis, cell_idx[mid]) < pcoord) {
+                        left = mid + 1;
+                    } else {
+                        right = mid;
+                    }
+                }
+
+                // Scan left
+                for (ptrdiff_t i = (left > begin ? left - 1 : begin); i >= begin; --i) {
+                    const G span = pcoord - tri_min_axis(sort_axis, cell_idx[i]);
+                    if (span * span > best_sq && tri_min_axis(sort_axis, cell_idx[i]) > pcoord) break;
+
+                    const I tid = cell_idx[i];
+                    if (!aabb_can_improve<T>(px,
+                                             py,
+                                             pz,
+                                             best_sq,
+                                             tminx[tid],
+                                             tmaxx[tid],
+                                             tminy[tid],
+                                             tmaxy[tid],
+                                             tminz[tid],
+                                             tmaxz[tid])) {
+                        continue;
+                    }
+
+                    const I i0 = s0[tid], i1 = s1[tid], i2 = s2[tid];
+                    const G dist_sq = point_triangle_dist_sq(px, py, pz, sx[i0], sy[i0], sz[i0], sx[i1], sy[i1], sz[i1], sx[i2], sy[i2], sz[i2]);
+                    if (dist_sq < best_sq) best_sq = dist_sq;
+                    if (i == begin) break;
+                }
+
+                // Scan right
+                for (ptrdiff_t i = left; i < end; ++i) {
+                    const G span = tri_min_axis(sort_axis, cell_idx[i]) - pcoord;
+                    if (span * span > best_sq && cum_max[i] - pcoord > std::sqrt(best_sq)) break;
+
+                    const I tid = cell_idx[i];
+                    if (!aabb_can_improve<T>(px,
+                                             py,
+                                             pz,
+                                             best_sq,
+                                             tminx[tid],
+                                             tmaxx[tid],
+                                             tminy[tid],
+                                             tmaxy[tid],
+                                             tminz[tid],
+                                             tmaxz[tid])) {
+                        continue;
+                    }
+
+                    const I i0 = s0[tid], i1 = s1[tid], i2 = s2[tid];
+                    const G dist_sq = point_triangle_dist_sq(px, py, pz, sx[i0], sy[i0], sz[i0], sx[i1], sy[i1], sz[i1], sx[i2], sy[i2], sz[i2]);
+                    if (dist_sq < best_sq) best_sq = dist_sq;
+                }
+            }
+
+            out[p] = std::sqrt(best_sq);
+        }
+
+        return 0;
+    }
+
+    template <typename G, typename T, typename I>
+    int edf_select(const ptrdiff_t npoints,
+                   const G *const SSDF_RESTRICT x,
+                   const G *const SSDF_RESTRICT y,
+                   const G *const SSDF_RESTRICT z,
+                   const ptrdiff_t nselements,
+                   const I *const SSDF_RESTRICT s0,
+                   const I *const SSDF_RESTRICT s1,
+                   const I *const SSDF_RESTRICT s2,
+                   const ptrdiff_t nspoints,
+                   const G *const SSDF_RESTRICT sx,
+                   const G *const SSDF_RESTRICT sy,
+                   const G *const SSDF_RESTRICT sz,
+                   T *const SSDF_RESTRICT out) {
+        int SSDF_USE_CELL_LIST = 0;
+        int SSDF_CELL_VALIDATE = 0;
+        SSDF_READ_ENV(SSDF_USE_CELL_LIST, atoi);
+        SSDF_READ_ENV(SSDF_CELL_VALIDATE, atoi);
+        if (SSDF_USE_CELL_LIST) {
+            if (SSDF_CELL_VALIDATE) {
+                std::vector<T> ref(out, out + npoints);
+                std::vector<T> test(out, out + npoints);
+                edf<G, T, I>(npoints, x, y, z, nselements, s0, s1, s2, nspoints, sx, sy, sz, ref.data());
+                edf_celllist<G, T, I>(npoints, x, y, z, nselements, s0, s1, s2, nspoints, sx, sy, sz, test.data());
+                T max_diff = 0;
+                for (ptrdiff_t i = 0; i < npoints; ++i) {
+                    max_diff = std::max<T>(max_diff, std::abs(ref[i] - test[i]));
+                }
+                if (max_diff > static_cast<T>(1e-5)) {
+                    std::cerr << "EDF cell-list validation max diff: " << max_diff << std::endl;
+                }
+                std::copy(test.begin(), test.end(), out);
+                return 0;
+            }
+            return edf_celllist<G, T, I>(npoints, x, y, z, nselements, s0, s1, s2, nspoints, sx, sy, sz, out);
+        }
+        return edf<G, T, I>(npoints, x, y, z, nselements, s0, s1, s2, nspoints, sx, sy, sz, out);
+    }
 }  // namespace ssdf
 
 #endif  // SSDF_HPP

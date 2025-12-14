@@ -310,6 +310,8 @@ int main(int argc, char *argv[]) {
         int SSDF_DOUBLE_PRECISION = 0;
         SSDF_READ_ENV(SSDF_DOUBLE_PRECISION, std::stoi);
 
+        double tick = ssdf::time_ms();
+
         int result = 0;
         if (SSDF_DOUBLE_PRECISION == 1 && !std::is_same<T, double>::value) {
             // Convert input and out to double
@@ -334,7 +336,7 @@ int main(int argc, char *argv[]) {
                 sz_double[i] = double(sz[i]);
             }
 
-            result = ssdf::edf<double, double, int>(npoints,
+            result = ssdf::edf_select<double, double, int>(npoints,
                                x_double.data(),
                                y_double.data(),
                                z_double.data(),
@@ -355,7 +357,7 @@ int main(int argc, char *argv[]) {
 
         } else {
             // Call edf for this surface
-            result = ssdf::edf(npoints,
+            result = ssdf::edf_select(npoints,
                                x.data(),
                                y.data(),
                                z.data(),
@@ -370,11 +372,16 @@ int main(int argc, char *argv[]) {
                                out.data());
         }
 
+        double tock = ssdf::time_ms();
+    printf("Time taken: %f ms\n", tock - tick);
+
         if (result != 0) {
             fprintf(stderr, "Error: edf function returned non-zero: %d\n", result);
             return 1;
         }
     }
+
+    
 
     // Write output
     printf("Writing output to '%s'...\n", output_file);

@@ -113,6 +113,7 @@ int main(int argc, char **argv) {
 
     if(!rank) {
         printf("Reading mesh files!\n");
+        fflush(stdout);
     }
 
     // Read surface points (distributed)
@@ -278,6 +279,25 @@ int main(int argc, char **argv) {
         }
 
     } else {
+        // if(SSDF_INPUT_SDF) {
+        //     printf("Using update mode with input SDF!\n");
+        //     ssdf::pedf_update<G, T, I>(comm,
+        //         lnpoints,
+        //         x.data(),
+        //         y.data(),
+        //         z.data(),
+        //         static_cast<ptrdiff_t>(s0.size()),
+        //         s0.data(),
+        //         s1.data(),
+        //         s2.data(),
+        //         static_cast<ptrdiff_t>(sx.size()),
+        //         sx.data(),
+        //         sy.data(),
+        //         sz.data(),
+        //         out.data());
+
+        // } else 
+        {
         ssdf::pedf<G, T, I>(comm,
                             lnpoints,
                             x.data(),
@@ -292,6 +312,7 @@ int main(int argc, char **argv) {
                             sy.data(),
                             sz.data(),
                             out.data());
+        }
     }
 
     // Write output

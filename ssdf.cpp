@@ -46,7 +46,7 @@ int ssdf_edf_f(const ptrdiff_t npoints,
                const float *const SSDF_RESTRICT sy,
                const float *const SSDF_RESTRICT sz,
                float *const SSDF_RESTRICT out) {
-    return ssdf::edf<float, float, int>(npoints, x, y, z, nselements, s0, s1, s2, nspoints, sx, sy, sz, out);
+    return ssdf::edf_select<float, float, int>(npoints, x, y, z, nselements, s0, s1, s2, nspoints, sx, sy, sz, out);
 }
 
 int ssdf_edf_d(const ptrdiff_t npoints,
@@ -62,6 +62,6 @@ int ssdf_edf_d(const ptrdiff_t npoints,
                const double *const SSDF_RESTRICT sy,
                const double *const SSDF_RESTRICT sz,
                double *const SSDF_RESTRICT out) {
-    return ssdf::edf<double, double, int>(npoints, x, y, z, nselements, s0, s1, s2, nspoints, sx, sy, sz, out);
+    return ssdf::edf_select<double, double, int>(npoints, x, y, z, nselements, s0, s1, s2, nspoints, sx, sy, sz, out);
 }
 }
