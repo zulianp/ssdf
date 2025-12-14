@@ -111,6 +111,10 @@ int main(int argc, char **argv) {
         return folder + "/" + fname;
     };
 
+    if(!rank) {
+        printf("Reading mesh files!\n");
+    }
+
     // Read surface points (distributed)
     ptrdiff_t surf_nspoints = 0, surf_sp_offset = 0;
     std::vector<G> sx, sy, sz;
@@ -225,7 +229,7 @@ int main(int argc, char **argv) {
     }
 
     if(!rank) { 
-        printf("Running pedf with %d points and %d surface elements\n", npoints_global, surf_nselements);
+        printf("Running pedf with %ld points and %ld surface elements\n", npoints_global, surf_nselements);
     }
 
     int SSDF_DOUBLE_PRECISION = 0;
