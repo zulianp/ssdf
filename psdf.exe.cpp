@@ -111,7 +111,7 @@ int main(int argc, char **argv) {
         return folder + "/" + fname;
     };
 
-    if(!rank) {
+    if (!rank) {
         printf("Reading mesh files!\n");
         fflush(stdout);
     }
@@ -229,7 +229,7 @@ int main(int argc, char **argv) {
         out.resize(lnpoints, 10000);
     }
 
-    if(!rank) { 
+    if (!rank) {
         printf("Running pedf with %ld points and %ld surface elements\n", npoints_global, surf_nselements);
     }
 
@@ -296,22 +296,22 @@ int main(int argc, char **argv) {
         //         sz.data(),
         //         out.data());
 
-        // } else 
+        // } else
         {
-        ssdf::pedf<G, T, I>(comm,
-                            lnpoints,
-                            x.data(),
-                            y.data(),
-                            z.data(),
-                            static_cast<ptrdiff_t>(s0.size()),
-                            s0.data(),
-                            s1.data(),
-                            s2.data(),
-                            static_cast<ptrdiff_t>(sx.size()),
-                            sx.data(),
-                            sy.data(),
-                            sz.data(),
-                            out.data());
+            ssdf::pedf<G, T, I>(comm,
+                                lnpoints,
+                                x.data(),
+                                y.data(),
+                                z.data(),
+                                static_cast<ptrdiff_t>(s0.size()),
+                                s0.data(),
+                                s1.data(),
+                                s2.data(),
+                                static_cast<ptrdiff_t>(sx.size()),
+                                sx.data(),
+                                sy.data(),
+                                sz.data(),
+                                out.data());
         }
     }
 

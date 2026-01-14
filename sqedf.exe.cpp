@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 #include "ssdf.hpp"
+#include "sqedf.hpp"
 
 template <typename T>
 int write_raw_file(const char *output_file, size_t count, T *data) {
@@ -367,7 +368,6 @@ int main(int argc, char *argv[]) {
             return 1;
         }
 
-
         // export_intervals(nselements, s0.data(), s1.data(), s2.data(), nspoints, sx.data(), sy.data(), sz.data());
 
         int SSDF_DOUBLE_PRECISION = 0;
@@ -399,19 +399,19 @@ int main(int argc, char *argv[]) {
                 sz_double[i] = double(sz[i]);
             }
 
-            result = ssdf::edf_select<double, double, int>(npoints,
-                                                           x_double.data(),
-                                                           y_double.data(),
-                                                           z_double.data(),
-                                                           nselements,
-                                                           s0.data(),
-                                                           s1.data(),
-                                                           s2.data(),
-                                                           nspoints,
-                                                           sx_double.data(),
-                                                           sy_double.data(),
-                                                           sz_double.data(),
-                                                           out_double.data());
+            result = ssdf::sqedf<double, double, int>(npoints,
+                                                      x_double.data(),
+                                                      y_double.data(),
+                                                      z_double.data(),
+                                                      nselements,
+                                                      s0.data(),
+                                                      s1.data(),
+                                                      s2.data(),
+                                                      nspoints,
+                                                      sx_double.data(),
+                                                      sy_double.data(),
+                                                      sz_double.data(),
+                                                      out_double.data());
 
             // Convert output to float
             for (ptrdiff_t i = 0; i < npoints; ++i) {
@@ -420,19 +420,19 @@ int main(int argc, char *argv[]) {
 
         } else {
             // Call edf for this surface
-            result = ssdf::edf_select(npoints,
-                                      x.data(),
-                                      y.data(),
-                                      z.data(),
-                                      nselements,
-                                      s0.data(),
-                                      s1.data(),
-                                      s2.data(),
-                                      nspoints,
-                                      sx.data(),
-                                      sy.data(),
-                                      sz.data(),
-                                      out.data());
+            result = ssdf::sqedf(npoints,
+                                 x.data(),
+                                 y.data(),
+                                 z.data(),
+                                 nselements,
+                                 s0.data(),
+                                 s1.data(),
+                                 s2.data(),
+                                 nspoints,
+                                 sx.data(),
+                                 sy.data(),
+                                 sz.data(),
+                                 out.data());
         }
 
         double tock = ssdf::time_ms();

@@ -165,6 +165,9 @@ add_test(NAME ssdf_brute_force_test COMMAND ssdf_brute_force_test)
 add_executable(sdf_exe sdf.exe.cpp)
 target_link_libraries(sdf_exe PRIVATE ssdf)
 
+add_executable(sqedf_exe sqedf.exe.cpp)
+target_link_libraries(sqedf_exe PRIVATE ssdf)
+
 
 if(SSDF_ENABLE_MPI)
     add_executable(psdf_exe psdf.exe.cpp)
