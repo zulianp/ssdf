@@ -56,8 +56,8 @@ namespace ssdf {
         inline void print() const { std::cout << name << " took " << duration << " ms" << std::endl; }
     };
 
-    #define SSDF_TIMER(name) Timer t_##name(#name);
-// #define SSDF_TIMER(...)
+#define SSDF_TIMER(name) Timer t_##name(#name);
+    // #define SSDF_TIMER(...)
 
     // Compute squared distance from point p to triangle (a, b, c)
     template <typename T>
@@ -281,11 +281,11 @@ namespace ssdf {
 
                 {
                     T acc = surf_max[0];
-#pragma omp parallel for reduction(inscan, max : acc)
+                    // #pragma omp parallel for reduction(inscan, max : acc)
                     for (ptrdiff_t i = 0; i < nselements; i++) {
                         acc = std::max(acc, surf_max[i]);
 
-#pragma omp scan inclusive(acc)
+                        // #pragma omp scan inclusive(acc)
                         cum_max[i] = acc;
                     }
                 }
@@ -613,6 +613,49 @@ namespace ssdf {
         {
             SSDF_TIMER(queries);
 
+            auto process_cell = [&](const ptrdiff_t cid, const G px, const G py, const G pz, T &best_sq) {
+                const ptrdiff_t begin = cell_ptr[cid];
+                const ptrdiff_t end = cell_ptr[cid + 1];
+                if (begin == end) return;
+
+                const G pcoord = (sort_axis == 0) ? px : (sort_axis == 1) ? py : pz;
+                const ptrdiff_t left = std::lower_bound(sorted_min + begin, sorted_min + end, pcoord) - sorted_min;
+
+                auto evaluate_triangle = [&](const ptrdiff_t idx) {
+                    const I tid = cell_idx[idx];
+                    const I i0 = s0[tid], i1 = s1[tid], i2 = s2[tid];
+                    const G dist_sq = point_triangle_dist_sq(
+                        px, py, pz, sx[i0], sy[i0], sz[i0], sx[i1], sy[i1], sz[i1], sx[i2], sy[i2], sz[i2]);
+                    if (dist_sq < best_sq) best_sq = dist_sq;
+                };
+
+                // Scan left
+                for (ptrdiff_t i = (left > begin) ? left - 1 : begin; i >= begin; --i) {
+                    const G margin = pcoord - cum_max[i];
+                    if (margin >= G(0) && margin * margin >= best_sq) break;
+
+                    if (aabb_can_improve<T>(
+                            px, py, pz, best_sq, tminx[i], tmaxx[i], tminy[i], tmaxy[i], tminz[i], tmaxz[i])) {
+                        evaluate_triangle(i);
+                    }
+                }
+
+                // Scan right
+                for (ptrdiff_t i = left; i < end; ++i) {
+                    const G margin = sorted_min[i] - pcoord;
+                    if (margin >= G(0) && margin * margin >= best_sq) break;
+
+                    if (!aabb_can_improve<T>(
+                            px, py, pz, best_sq, tminx[i], tmaxx[i], tminy[i], tmaxy[i], tminz[i], tmaxz[i])) {
+                        continue;
+                    }
+
+                    evaluate_triangle(i);
+                }
+            };
+
+            const G*const xyz[3] = {x, y, z};
+
             // Query points
 #pragma omp parallel for
             for (ptrdiff_t p = 0; p < npoints; ++p) {
@@ -625,6 +668,20 @@ namespace ssdf {
                 // 3) Check sourrounding cells outword ring by ring
                 // Make sure that the loop ends when no improvements are possible
 
+                const ptrdiff_t first_cid = cell_id(xyz[axis0][p], xyz[axis1][p]);
+                if (cell_counts[first_cid] != 0 && aabb_can_improve<T>(px,
+                                                                 py,
+                                                                 pz,
+                                                                 best_sq,
+                                                                 cell_minx[first_cid],
+                                                                 cell_maxx[first_cid],
+                                                                 cell_miny[first_cid],
+                                                                 cell_maxy[first_cid],
+                                                                 cell_minz[first_cid],
+                                                                 cell_maxz[first_cid])) {
+                    process_cell(first_cid, px, py, pz, best_sq);
+                }
+
                 // Iterate cells with conservative culling
                 for (ptrdiff_t cid = 0; cid < ncells; ++cid) {
                     if (cell_counts[cid] == 0 || !aabb_can_improve<T>(px,
@@ -636,46 +693,12 @@ namespace ssdf {
                                                                       cell_miny[cid],
                                                                       cell_maxy[cid],
                                                                       cell_minz[cid],
-                                                                      cell_maxz[cid])) {
+                                                                      cell_maxz[cid]) || first_cid == cid
+                        ) {
                         continue;
                     }
 
-                    const ptrdiff_t begin = cell_ptr[cid];
-                    const ptrdiff_t end = cell_ptr[cid + 1];
-                    const G pcoord = (sort_axis == 0) ? px : (sort_axis == 1) ? py : pz;
-                    const ptrdiff_t left = std::lower_bound(sorted_min + begin, sorted_min + end, pcoord) - sorted_min;
-
-                    // Scan left
-                    for (ptrdiff_t i = (left > begin) ? left - 1 : begin; i >= begin; --i) {
-                        const G margin = pcoord - cum_max[i];
-                        if (margin >= G(0) && margin * margin >= best_sq) break;
-
-                        if (aabb_can_improve<T>(
-                                px, py, pz, best_sq, tminx[i], tmaxx[i], tminy[i], tmaxy[i], tminz[i], tmaxz[i])) {
-                            const I tid = cell_idx[i];
-                            const I i0 = s0[tid], i1 = s1[tid], i2 = s2[tid];
-                            const G dist_sq = point_triangle_dist_sq(
-                                px, py, pz, sx[i0], sy[i0], sz[i0], sx[i1], sy[i1], sz[i1], sx[i2], sy[i2], sz[i2]);
-                            best_sq = std::min(best_sq, dist_sq);
-                        }
-                    }
-
-                    // Scan right
-                    for (ptrdiff_t i = left; i < end; ++i) {
-                        const G margin = sorted_min[i] - pcoord;
-                        if (margin >= G(0) && margin * margin >= best_sq) break;
-
-                        if (!aabb_can_improve<T>(
-                                px, py, pz, best_sq, tminx[i], tmaxx[i], tminy[i], tmaxy[i], tminz[i], tmaxz[i])) {
-                            continue;
-                        }
-
-                        const I tid = cell_idx[i];
-                        const I i0 = s0[tid], i1 = s1[tid], i2 = s2[tid];
-                        const G dist_sq = point_triangle_dist_sq(
-                            px, py, pz, sx[i0], sy[i0], sz[i0], sx[i1], sy[i1], sz[i1], sx[i2], sy[i2], sz[i2]);
-                        if (dist_sq < best_sq) best_sq = dist_sq;
-                    }
+                    process_cell(cid, px, py, pz, best_sq);
                 }
 
                 out[p] = std::sqrt(best_sq);

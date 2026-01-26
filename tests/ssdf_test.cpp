@@ -26,7 +26,10 @@ int main() {
     G y[5] = {0.5f, 0.0f, 0.0f, 0.5f, 0.25f};
     G z[5] = {0.0f, 0.0f, 0.0f, 1.0f, 0.0f};
 
-    T out[5] = {1111111};
+    T out[5];
+    for(int i = 0; i < 5; i++) {
+        out[i] = 1111111;
+    }
 
     // Call sdf function
     int result = ssdf::edf(npoints, x, y, z, nselements, s0, s1, s2, nspoints, sx, sy, sz, out);
