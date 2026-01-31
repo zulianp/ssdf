@@ -31,22 +31,37 @@ int main() {
         out[i] = 1111111;
     }
 
-    // Call sdf function
-    int result = ssdf::edf(npoints, x, y, z, nselements, s0, s1, s2, nspoints, sx, sy, sz, out);
+    // Call sdf function (use celllist variant for correctness check)
+    int result = ssdf::edf_celllist(npoints, x, y, z, nselements, s0, s1, s2, nspoints, sx, sy, sz, out);
 
     assert(result == 0);
 
-    // Check that distances are computed (should be finite and non-negative)
+    auto brute = [&](ptrdiff_t p) {
+        const G px = x[p], py = y[p], pz = z[p];
+        const G dist_sq = ssdf::point_triangle_dist_sq(px,
+                                                       py,
+                                                       pz,
+                                                       sx[s0[0]],
+                                                       sy[s0[0]],
+                                                       sz[s0[0]],
+                                                       sx[s1[0]],
+                                                       sy[s1[0]],
+                                                       sz[s1[0]],
+                                                       sx[s2[0]],
+                                                       sy[s2[0]],
+                                                       sz[s2[0]]);
+        return std::sqrt(dist_sq);
+    };
+
+    // Check that distances are computed and match brute force
     for (ptrdiff_t i = 0; i < npoints; i++) {
         assert(std::isfinite(out[i]));
         assert(out[i] >= 0.0f);
+        const G expected = brute(i);
+        assert(std::abs(out[i] - expected) < 1e-5f);
         std::cout << "Point (" << x[i] << ", " << y[i] << ", " << z[i] 
                   << ") distance: " << out[i] << std::endl;
     }
-
-    // Point at (0.5, 0.5, 0.0) should be close to triangle center
-    // Point at (0.5, 0.5, 1.0) should be approximately 1.0 away (vertical)
-    assert(out[3] > 0.9f && out[3] < 1.1f);
 
     std::cout << "All tests passed!" << std::endl;
     return 0;

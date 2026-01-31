@@ -313,9 +313,24 @@ int main(int argc, char *argv[]) {
 
         fclose(sdf_file);
     } else {
-        // Initialize output with large distances
-        for (ptrdiff_t i = 0; i < npoints; i++) {
-            out[i] = std::numeric_limits<T>::max();
+        // Initialize with points box (case where surface points coincide with query points)
+        int SSDF_INIT_WITH_VOLUME_BOX = 0;
+        SSDF_READ_ENV(SSDF_INIT_WITH_VOLUME_BOX, std::stoi);
+        if (SSDF_INIT_WITH_VOLUME_BOX) {
+            G xmin, xmax, ymin, ymax, zmin, zmax;
+            ssdf::compute_aabb(npoints, x.data(), y.data(), z.data(), &xmin, &xmax, &ymin, &ymax, &zmin, &zmax);
+            ssdf::all_points_aabb_signed_distance<G, T>(
+                npoints, x.data(), y.data(), z.data(), xmin, xmax, ymin, ymax, zmin, zmax, out.data());
+#pragma omp parallel for
+            for (ptrdiff_t i = 0; i < npoints; i++) {
+                out[i] = std::abs(out[i]);
+            }
+        } else {
+            // Initialize output with large distances
+#pragma omp parallel for
+            for (ptrdiff_t i = 0; i < npoints; i++) {
+                out[i] = std::numeric_limits<T>::max();
+            }
         }
     }
 
@@ -366,7 +381,6 @@ int main(int argc, char *argv[]) {
             fprintf(stderr, "Error: Failed to read surface indices from '%s'\n", surf_folder);
             return 1;
         }
-
 
         // export_intervals(nselements, s0.data(), s1.data(), s2.data(), nspoints, sx.data(), sy.data(), sz.data());
 

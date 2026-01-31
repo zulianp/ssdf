@@ -12,27 +12,14 @@
 #include <tuple>
 #include <vector>
 
-#ifndef SSDF_READ_ENV
-#define SSDF_READ_ENV(name, conversion) \
-    do {                                \
-        char *var = getenv(#name);      \
-        if (var) {                      \
-            name = conversion(var);     \
-        }                               \
-    } while (0)
+#include "edf/edf.hpp"
+
+#ifdef SSDF_ENABLE_CUBIQL
+#include "bvh.hpp"
 #endif
 
-#ifndef SSDF_RESTRICT
-#ifndef _WIN32
-#define SSDF_RESTRICT __restrict__
-#else
-#define SSDF_RESTRICT __restrict
-#endif
-#endif
 
-#define VECTOR_SIZE 32
-
-#define MIN(a, b) ((a) < (b) ? (a) : (b))
+    
 namespace ssdf {
 
     // Return current time in milliseconds
@@ -133,24 +120,104 @@ namespace ssdf {
         return dx * dx + dy * dy + dz * dz;
     }
 
-    template <typename T>
-    inline static T point_triangle_dist_sq_approx(const T px,
-                                                  const T py,
-                                                  const T pz,
-                                                  const T ax,
-                                                  const T ay,
-                                                  const T az,
-                                                  const T bx,
-                                                  const T by,
-                                                  const T bz,
-                                                  const T cx,
-                                                  const T cy,
-                                                  const T cz) {
-        const T dx = std::min({std::abs(px - ax), std::abs(px - bx), std::abs(px - cx)});
-        const T dy = std::min({std::abs(py - ay), std::abs(py - by), std::abs(py - cy)});
-        const T dz = std::min({std::abs(pz - az), std::abs(pz - bz), std::abs(pz - cz)});
-        return dx * dx + dy * dy + dz * dz;
-    }
+    // template <typename T>
+    // inline static void point_triangle_distance_vector(const T px,
+    //                                                   const T py,
+    //                                                   const T pz,
+    //                                                   const T ax,
+    //                                                   const T ay,
+    //                                                   const T az,
+    //                                                   const T bx,
+    //                                                   const T by,
+    //                                                   const T bz,
+    //                                                   const T cx,
+    //                                                   const T cy,
+    //                                                   const T cz,
+    //                                                   T *const SSDF_RESTRICT outx,
+    //                                                   T *const SSDF_RESTRICT outy,
+    //                                                   T *const SSDF_RESTRICT outz) {
+    //     //  Instead of returning the distance, store the vector to the closest point on the triangle
+    //     const T abx = bx - ax, aby = by - ay, abz = bz - az;
+    //     const T acx = cx - ax, acy = cy - ay, acz = cz - az;
+    //     const T apx = px - ax, apy = py - ay, apz = pz - az;
+
+    //     const T d1 = abx * apx + aby * apy + abz * apz;
+    //     const T d2 = acx * apx + acy * apy + acz * apz;
+    //     if (d1 <= T(0) && d2 <= T(0)) {
+    //         outx[0] = ax - px;
+    //         outy[0] = ay - py;
+    //         outz[0] = az - pz;
+    //     }
+    //     const T bpx = px - bx, bpy = py - by, bpz = pz - bz;
+    //     const T d3 = abx * bpx + aby * bpy + abz * bpz;
+    //     const T d4 = acx * bpx + acy * bpy + acz * bpz;
+    //     if (d3 >= T(0) && d4 <= d3) {
+    //         outx[0] = bx - px;
+    //         outy[0] = by - py;
+    //         outz[0] = bz - pz;
+    //     }
+    //     const T cpx = px - cx, cpy = py - cy, cpz = pz - cz;
+    //     const T d5 = abx * cpx + aby * cpy + abz * cpz;
+    //     const T d6 = acx * cpx + acy * cpy + acz * cpz;
+    //     if (d6 >= T(0) && d5 <= d6) {
+    //         outx[0] = cx - px;
+    //         outy[0] = cy - py;
+    //         outz[0] = cz - pz;
+    //     }
+    //     const T vb = d5 * d2 - d1 * d6;
+    //     if (vb <= T(0) && d2 >= T(0) && d6 <= T(0)) {
+    //         outx[0] = ax + d2 / (d2 - d6) * (cx - ax);
+    //         outy[0] = ay + d2 / (d2 - d6) * (cy - ay);
+    //         outz[0] = az + d2 / (d2 - d6) * (cz - az);
+    //     }
+    //     const T va = d3 * d6 - d5 * d4;
+    //     if (va <= T(0) && (d4 - d3) >= T(0) && (d5 - d6) >= T(0)) {
+    //         outx[0] = bx + (d4 - d3) / ((d4 - d3) + (d5 - d6)) * (cx - bx);
+    //         outy[0] = by + (d4 - d3) / ((d4 - d3) + (d5 - d6)) * (cy - by);
+    //         outz[0] = bz + (d4 - d3) / ((d4 - d3) + (d5 - d6)) * (cz - bz);
+    //     }
+    //     const T denom = T(1) / (va + vb + vc);
+    //     const T v = vb * denom;
+    //     const T w = vc * denom;
+    //     outx[0] = ax + abx * v + acx * w;
+    //     outy[0] = ay + aby * v + acy * w;
+    //     outz[0] = az + abz * v + acz * w;
+    // }
+
+    // template <typename T>
+    // inline static T point_triangle_dist_sq_approx(const T px,
+    //                                               const T py,
+    //                                               const T pz,
+    //                                               const T ax,
+    //                                               const T ay,
+    //                                               const T az,
+    //                                               const T bx,
+    //                                               const T by,
+    //                                               const T bz,
+    //                                               const T cx,
+    //                                               const T cy,
+    //                                               const T cz) {
+    //     const T dx = std::min({std::abs(px - ax), std::abs(px - bx), std::abs(px - cx)});
+    //     const T dy = std::min({std::abs(py - ay), std::abs(py - by), std::abs(py - cy)});
+    //     const T dz = std::min({std::abs(pz - az), std::abs(pz - bz), std::abs(pz - cz)});
+    //     return dx * dx + dy * dy + dz * dz;
+    // }
+
+    // template <typename T>
+    // inline static T point_aabb_distance_squared(const T px,
+    //                                             const T py,
+    //                                             const T pz,
+    //                                             const T minx,
+    //                                             const T maxx,
+    //                                             const T miny,
+    //                                             const T maxy,
+    //                                             const T minz,
+    //                                             const T maxz) {
+    //     const T dx = (px < minx) ? (minx - px) : (px > maxx ? px - maxx : T(0));
+    //     const T dy = (py < miny) ? (miny - py) : (py > maxy ? py - maxy : T(0));
+    //     const T dz = (pz < minz) ? (minz - pz) : (pz > maxz ? pz - maxz : T(0));
+    //     return dx * dx + dy * dy + dz * dz;
+    // }
 
     // Conservative AABB check for a single element
     template <typename T>
@@ -164,23 +231,7 @@ namespace ssdf {
                                         const T maxy,
                                         const T minz,
                                         const T maxz) {
-        // const T dxmin = px - minx;
-        // const T dxmax = px - maxx;
-        // const T dymin = py - miny;
-        // const T dymax = py - maxy;
-        // const T dzmin = pz - minz;
-        // const T dzmax = pz - maxz;
-        // const T dx = MIN(dxmin * dxmin, dxmax * dxmax);
-        // const T dy = MIN(dymin * dymin, dymax * dymax);
-        // const T dz = MIN(dzmin * dzmin, dzmax * dzmax);
-        // const T dist_sq = dx + dy + dz;
-        // return dist_sq < best_sq ||
-        //        (dxmin >= 0 && dxmax <= 0 && dymin >= 0 && dymax <= 0 && dzmin >= 0 && dzmax <= 0);
-
-        const T dx = (px < minx) ? (minx - px) : (px > maxx ? px - maxx : T(0));
-        const T dy = (py < miny) ? (miny - py) : (py > maxy ? py - maxy : T(0));
-        const T dz = (pz < minz) ? (minz - pz) : (pz > maxz ? pz - maxz : T(0));
-        return dx * dx + dy * dy + dz * dz < best_sq;
+        return point_aabb_distance_squared(px, py, pz, minx, maxx, miny, maxy, minz, maxz) < best_sq;
     }
 
     /**
@@ -654,7 +705,15 @@ namespace ssdf {
                 }
             };
 
-            const G*const xyz[3] = {x, y, z};
+// // warmup distance
+// #pragma omp parallel for
+//             for (ptrdiff_t p = 0; p < npoints; p++) {
+//                 T sqdist =
+//                     std::sqrt(point_aabb_distance_squared(x[p], y[p], z[p], gminx, gmaxx, gminy, gmaxy, gminz, gmaxz));
+//                 out[p] = MIN(out[p], sqdist);
+//             }
+
+            const G *const xyz[3] = {x, y, z};
 
             // Query points
 #pragma omp parallel for
@@ -670,31 +729,32 @@ namespace ssdf {
 
                 const ptrdiff_t first_cid = cell_id(xyz[axis0][p], xyz[axis1][p]);
                 if (cell_counts[first_cid] != 0 && aabb_can_improve<T>(px,
-                                                                 py,
-                                                                 pz,
-                                                                 best_sq,
-                                                                 cell_minx[first_cid],
-                                                                 cell_maxx[first_cid],
-                                                                 cell_miny[first_cid],
-                                                                 cell_maxy[first_cid],
-                                                                 cell_minz[first_cid],
-                                                                 cell_maxz[first_cid])) {
+                                                                       py,
+                                                                       pz,
+                                                                       best_sq,
+                                                                       cell_minx[first_cid],
+                                                                       cell_maxx[first_cid],
+                                                                       cell_miny[first_cid],
+                                                                       cell_maxy[first_cid],
+                                                                       cell_minz[first_cid],
+                                                                       cell_maxz[first_cid])) {
                     process_cell(first_cid, px, py, pz, best_sq);
                 }
 
                 // Iterate cells with conservative culling
                 for (ptrdiff_t cid = 0; cid < ncells; ++cid) {
-                    if (cell_counts[cid] == 0 || !aabb_can_improve<T>(px,
-                                                                      py,
-                                                                      pz,
-                                                                      best_sq,
-                                                                      cell_minx[cid],
-                                                                      cell_maxx[cid],
-                                                                      cell_miny[cid],
-                                                                      cell_maxy[cid],
-                                                                      cell_minz[cid],
-                                                                      cell_maxz[cid]) || first_cid == cid
-                        ) {
+                    if (cell_counts[cid] == 0 ||
+                        !aabb_can_improve<T>(px,
+                                             py,
+                                             pz,
+                                             best_sq,
+                                             cell_minx[cid],
+                                             cell_maxx[cid],
+                                             cell_miny[cid],
+                                             cell_maxy[cid],
+                                             cell_minz[cid],
+                                             cell_maxz[cid]) ||
+                        first_cid == cid) {
                         continue;
                     }
 
@@ -726,6 +786,13 @@ namespace ssdf {
         int SSDF_CELL_VALIDATE = 0;
         SSDF_READ_ENV(SSDF_USE_CELL_LIST, atoi);
         SSDF_READ_ENV(SSDF_CELL_VALIDATE, atoi);
+#ifdef SSDF_ENABLE_CUBIQL
+        int SSDF_USE_BVH = 0;
+        SSDF_READ_ENV(SSDF_USE_BVH, atoi);
+        if (SSDF_USE_BVH) {
+            return edf_bvh<G, T, I>(npoints, x, y, z, nselements, s0, s1, s2, nspoints, sx, sy, sz, out);
+        }
+#endif
 
         if (SSDF_CELL_VALIDATE) {
             // Just for testing consistency

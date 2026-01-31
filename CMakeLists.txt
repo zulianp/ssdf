@@ -12,6 +12,9 @@ option(SSDF_ENABLE_MPI "Enable MPI support" OFF)
 option(SSDF_ENABLE_OPENMP "Enable OpenMP support" OFF)
 option(SSDF_ENABLE_CUDA "Enable CUDA support" OFF)
 option(SSDF_ENABLE_HIP "Enable HIP support" OFF)
+option(SSDF_ENABLE_CUBIQL "Enable cuBQL support" OFF)
+
+add_subdirectory(edf)
 
 # Set output directories
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
@@ -48,11 +51,12 @@ endif()
 # Library sources
 set(SSDF_SOURCES
     ssdf.cpp
+    kdtree/kdtree.cpp
 )
 
 
 # Collect header files (only include existing files)
-set(SSDF_HEADERS "")
+set(SSDF_HEADERS "${CMAKE_CURRENT_SOURCE_DIR}/kdtree/kdtree.hpp")
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/ssdf.hpp")
     list(APPEND SSDF_HEADERS "${CMAKE_CURRENT_SOURCE_DIR}/ssdf.hpp")
 endif()
@@ -75,6 +79,7 @@ set_target_properties(ssdf PROPERTIES
 )
 
 # Link dependencies
+target_link_libraries(ssdf PUBLIC ssdf_edf)
 
 # Add optional dependencies
 if(SSDF_ENABLE_MPI)
@@ -148,18 +153,31 @@ install(FILES
 # Testing
 enable_testing()
 
-# Test executable
-add_executable(ssdf_test tests/ssdf_test.cpp)
-target_link_libraries(ssdf_test PRIVATE ssdf)
+# Test executables discovered automatically
+file(GLOB SSDF_TEST_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/tests/*_test.cpp")
+set(SSDF_TEST_TARGETS "")
+foreach(test_src ${SSDF_TEST_SOURCES})
+    get_filename_component(test_name "${test_src}" NAME_WE)
+    add_executable(${test_name} "${test_src}")
+    if(test_name STREQUAL "point_aabb_distance_test")
+        target_link_libraries(${test_name} PRIVATE ssdf_edf)
+    else()
+        target_link_libraries(${test_name} PRIVATE ssdf)
+    endif()
+    add_test(NAME ${test_name} COMMAND ${test_name})
+    list(APPEND SSDF_TEST_TARGETS ${test_name})
+endforeach()
 
-# Add test to CTest
-add_test(NAME ssdf_basic_test COMMAND ssdf_test)
+if(SSDF_TEST_TARGETS)
+    add_custom_target(ssdf_tests ALL DEPENDS ${SSDF_TEST_TARGETS})
+endif()
 
-
-add_executable(ssdf_brute_force_test tests/ssdf_brute_force_test.cpp)
-target_link_libraries(ssdf_brute_force_test PRIVATE ssdf)
-
-add_test(NAME ssdf_brute_force_test COMMAND ssdf_brute_force_test)
+if(SSDF_ENABLE_CUBIQL)
+    add_subdirectory(/Users/patrickzulian/Desktop/code/installations/sources/cuBQL "${CMAKE_BINARY_DIR}/_deps/cuBQL-build")
+    target_link_libraries(ssdf PRIVATE cuBQL)
+    add_subdirectory(bvh)
+    add_definitions("-DSSDF_ENABLE_CUBIQL")
+endif()
 
 # SDF executable
 add_executable(sdf_exe sdf.exe.cpp)
@@ -168,8 +186,10 @@ target_link_libraries(sdf_exe PRIVATE ssdf)
 add_executable(sqedf_exe sqedf.exe.cpp)
 target_link_libraries(sqedf_exe PRIVATE ssdf)
 
-
 if(SSDF_ENABLE_MPI)
     add_executable(psdf_exe psdf.exe.cpp)
     target_link_libraries(psdf_exe PRIVATE ssdf)
 endif()
+
+
+

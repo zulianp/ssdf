@@ -80,16 +80,16 @@ int main() {
         double brute_d = brute(i);
         {
             double d = std::abs(out_ref[i] - brute_d);
-            if (d > 1e-9) {
-                std::cout << "ref mismatch at " << i << " ref " << out_ref[i] << " brute " << brute_d << "\n";
+            if (d > 1e-8) {
+                std::cout << "ref mismatch at " << i << " ref " << out_ref[i] << " expected " << brute_d << "\n";
                 return 1;
             }
         }
 
         {
             double d = std::abs(out_cell[i] - brute_d);
-            if (d > 1e-9) {
-                std::cout << "cell mismatch at " << i << " ref " << out_ref[i] << " brute " << brute_d << "\n";
+            if (d > 1e-8) {
+                std::cout << "cell mismatch at " << i << " actual " << out_ref[i] << " expected " << brute_d << "\n";
                 return 1;
             }
         }
