@@ -4,3 +4,7 @@ list(APPEND SSDF_BVH_HEADERS "${CMAKE_CURRENT_SOURCE_DIR}/bvh.hpp")
 target_sources(ssdf PRIVATE ${SSDF_BVH_SOURCES})
 target_include_directories(ssdf     PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>)
+
+if(SSDF_ENABLE_CUDA)
+    list(APPEND SSDF_BVH_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/bvh.cu")
+endif()

@@ -40,6 +40,11 @@ if(SSDF_ENABLE_CUDA)
     message(STATUS "CUDA enabled")
     set(CMAKE_CUDA_STANDARD 17)
     set(CMAKE_CUDA_STANDARD_REQUIRED ON)
+
+    if(NOT CMAKE_CUDA_ARCHITECTURES)
+        set(CMAKE_CUDA_ARCHITECTURES "native")
+    endif()
+    
 endif()
 
 if(SSDF_ENABLE_HIP)
