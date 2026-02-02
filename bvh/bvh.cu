@@ -98,3 +98,46 @@ int edf_bvh_cuda(const ptrdiff_t npoints,
     cuBQL::cuda::free(d_bvh);
     return 0;
 }
+
+
+template int edf_bvh_cuda<float, double, int>(const ptrdiff_t npoints,
+    const float *const SSDF_RESTRICT,
+    const float *const SSDF_RESTRICT,
+    const float *const SSDF_RESTRICT,
+    const ptrdiff_t,
+    const int *const SSDF_RESTRICT,
+    const int *const SSDF_RESTRICT,
+    const int *const SSDF_RESTRICT,
+    const ptrdiff_t,
+    const float *const SSDF_RESTRICT,
+    const float *const SSDF_RESTRICT,
+    const float *const SSDF_RESTRICT,
+    double *const SSDF_RESTRICT);
+
+template int edf_bvh_cuda<float, float, int>(const ptrdiff_t npoints,
+   const float *const SSDF_RESTRICT,
+   const float *const SSDF_RESTRICT,
+   const float *const SSDF_RESTRICT,
+   const ptrdiff_t,
+   const int *const SSDF_RESTRICT,
+   const int *const SSDF_RESTRICT,
+   const int *const SSDF_RESTRICT,
+   const ptrdiff_t,
+   const float *const SSDF_RESTRICT,
+   const float *const SSDF_RESTRICT,
+   const float *const SSDF_RESTRICT,
+   float *const SSDF_RESTRICT);
+
+template int edf_bvh_cuda<double, double, int>(const ptrdiff_t npoints,
+     const double *const SSDF_RESTRICT,
+     const double *const SSDF_RESTRICT,
+     const double *const SSDF_RESTRICT,
+     const ptrdiff_t,
+     const int *const SSDF_RESTRICT,
+     const int *const SSDF_RESTRICT,
+     const int *const SSDF_RESTRICT,
+     const ptrdiff_t,
+     const double *const SSDF_RESTRICT,
+     const double *const SSDF_RESTRICT,
+     const double *const SSDF_RESTRICT,
+     double *const SSDF_RESTRICT);
