@@ -68,6 +68,7 @@ namespace ssdf {
 
         T *d_out = 0;
         CUBQL_CUDA_CALL(Malloc((void **)&d_out, npoints * sizeof(T)));
+        CUBQL_CUDA_CALL(Memcpy(d_out, out, npoints * sizeof(T), cudaMemcpyHostToDevice));
 
         std::vector<Triangle> h_triangles(nselements);
         for (ptrdiff_t i = 0; i < nselements; i++) {
