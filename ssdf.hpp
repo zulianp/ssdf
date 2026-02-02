@@ -580,6 +580,8 @@ namespace ssdf {
 
         const G *tmin_axis0 = (axis0 == 0) ? tminx.data() : (axis0 == 1) ? tminy.data() : tminz.data();
         const G *tmin_axis1 = (axis1 == 0) ? tminx.data() : (axis1 == 1) ? tminy.data() : tminz.data();
+        const G *tmax_axis0 = (axis0 == 0) ? tmaxx.data() : (axis0 == 1) ? tmaxy.data() : tmaxz.data();
+        const G *tmax_axis1 = (axis1 == 0) ? tmaxx.data() : (axis1 == 1) ? tmaxy.data() : tmaxz.data();
 
         std::vector<I> cell_counts(ncells, 0);
         std::vector<G> cell_minx(ncells, std::numeric_limits<G>::max());
@@ -599,7 +601,7 @@ namespace ssdf {
 
         // Count and aggregate cell AABBs
         for (ptrdiff_t i = 0; i < nselements; ++i) {
-            const ptrdiff_t cid = cell_id(tmin_axis0[i], tmin_axis1[i]);
+            const ptrdiff_t cid = cell_id((tmin_axis0[i] + tmax_axis0[i])/2, (tmin_axis1[i] + tmax_axis1[i])/2);
             cell_counts[cid] += 1;
             cell_minx[cid] = std::min(cell_minx[cid], tminx[i]);
             cell_maxx[cid] = std::max(cell_maxx[cid], tmaxx[i]);
@@ -616,7 +618,7 @@ namespace ssdf {
         std::vector<I> cell_idx(nselements);
         std::vector<ptrdiff_t> fill_ptr = cell_ptr;
         for (ptrdiff_t i = 0; i < nselements; ++i) {
-            const ptrdiff_t cid = cell_id(tmin_axis0[i], tmin_axis1[i]);
+            const ptrdiff_t cid = cell_id((tmin_axis0[i] + tmax_axis0[i])/2, (tmin_axis1[i] + tmax_axis1[i])/2);
             cell_idx[fill_ptr[cid]++] = I(i);
         }
 
@@ -727,7 +729,7 @@ namespace ssdf {
                 // 3) Check sourrounding cells outword ring by ring
                 // Make sure that the loop ends when no improvements are possible
 
-                const ptrdiff_t first_cid = cell_id(xyz[axis0][p], xyz[axis1][p]);
+                const ptrdiff_t first_cid = cell_id((xyz[axis0][p] + xyz[axis0][p])/2, (xyz[axis1][p] + xyz[axis1][p])/2);
                 if (cell_counts[first_cid] != 0 && aabb_can_improve<T>(px,
                                                                        py,
                                                                        pz,

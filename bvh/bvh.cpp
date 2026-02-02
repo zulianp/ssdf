@@ -52,6 +52,7 @@ namespace ssdf {
                               const G *const SSDF_RESTRICT y,
                               const G *const SSDF_RESTRICT z,
                               T *const SSDF_RESTRICT out) {
+            #pragma omp parallel for
             for (int tid = 0; tid < numQueries; tid++) {
                 vec3f queryPoint(x[tid], y[tid], z[tid]);
                 cuBQL::triangles::CPAT cpat;

@@ -105,21 +105,34 @@ namespace ssdf {
                              T *const SSDF_RESTRICT ymax,
                              T *const SSDF_RESTRICT zmin,
                              T *const SSDF_RESTRICT zmax) {
-        *xmin = x[0];
-        *xmax = x[0];
-        *ymin = y[0];
-        *ymax = y[0];
-        *zmin = z[0];
-        *zmax = z[0];
-#pragma omp parallel for reduction(min : xmin, ymin, zmin) reduction(max : xmax, ymax, zmax)
+        // Reduce on scalars (OpenMP reduction cannot operate on pointer variables).
+        T xmin_v = T(x[0]);
+        T xmax_v = T(x[0]);
+        T ymin_v = T(y[0]);
+        T ymax_v = T(y[0]);
+        T zmin_v = T(z[0]);
+        T zmax_v = T(z[0]);
+
+#pragma omp parallel for reduction(min : xmin_v, ymin_v, zmin_v) reduction(max : xmax_v, ymax_v, zmax_v)
         for (ptrdiff_t i = 0; i < npoints; ++i) {
-            *xmin = std::min({x[i], *xmin});
-            *xmax = std::max({x[i], *xmax});
-            *ymin = std::min({y[i], *ymax});
-            *ymax = std::max({y[i], *ymax});
-            *zmin = std::min({z[i], *zmax});
-            *zmax = std::max({z[i], *zmax});
+            const T xi = T(x[i]);
+            const T yi = T(y[i]);
+            const T zi = T(z[i]);
+
+            xmin_v = std::min(xmin_v, xi);
+            xmax_v = std::max(xmax_v, xi);
+            ymin_v = std::min(ymin_v, yi);
+            ymax_v = std::max(ymax_v, yi);
+            zmin_v = std::min(zmin_v, zi);
+            zmax_v = std::max(zmax_v, zi);
         }
+
+        *xmin = xmin_v;
+        *xmax = xmax_v;
+        *ymin = ymin_v;
+        *ymax = ymax_v;
+        *zmin = zmin_v;
+        *zmax = zmax_v;
     }
 
     template <typename G, typename T>

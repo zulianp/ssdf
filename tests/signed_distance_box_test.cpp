@@ -12,7 +12,7 @@ int main() {
     const T minz = 0.5, maxz = 1.5;
 
     auto check = [&](T px, T py, T pz, T expected, const char* label) {
-        const T d = ssdf::signed_distance_box(px, py, pz, minx, maxx, miny, maxy, minz, maxz);
+        const T d = ssdf::point_aabb_signed_distance(px, py, pz, minx, maxx, miny, maxy, minz, maxz);
         const T diff = std::abs(d - expected);
         if (diff > 1e-12) {
             std::cerr << "Mismatch " << label << ": expected " << expected << " got " << d << std::endl;
