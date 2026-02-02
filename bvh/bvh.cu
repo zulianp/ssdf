@@ -21,7 +21,7 @@ __global__ void edf_bvh_cuda_generate_boxes_kernel(box3f *boxForBuilder, const T
     boxForBuilder[tid] = triangle.bounds();
 }
 
-template <typename G, typename T, typename I>
+template <typename G, typename T>
 __global__ void edf_bvh_cuda_queries_kernel(bvh3f trianglesBVH,
                                             const Triangle *triangles,
                                             int numQueries,
