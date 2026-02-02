@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
+#include <stddef.h>
 
 #ifndef SSDF_READ_ENV
 #define SSDF_READ_ENV(name, conversion) \
