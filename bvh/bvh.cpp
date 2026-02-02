@@ -6,6 +6,42 @@
 
 namespace ssdf {
 
+    template <typename T>
+    static inline void barycentric_coordinates(const T px,
+                                               const T py,
+                                               const T pz,
+                                               const T ax,
+                                               const T ay,
+                                               const T az,
+                                               const T bx,
+                                               const T by,
+                                               const T bz,
+                                               const T cx,
+                                               const T cy,
+                                               const T cz,
+                                               T *const SSDF_RESTRICT w0,
+                                               T *const SSDF_RESTRICT w1,
+                                               T *const SSDF_RESTRICT w2) {
+        const T v0x = bx - ax, v0y = by - ay, v0z = bz - az;
+        const T v1x = cx - ax, v1y = cy - ay, v1z = cz - az;
+        const T v2x = px - ax, v2y = py - ay, v2z = pz - az;
+
+        const T d00 = v0x * v0x + v0y * v0y + v0z * v0z;
+        const T d01 = v0x * v1x + v0y * v1y + v0z * v1z;
+        const T d11 = v1x * v1x + v1y * v1y + v1z * v1z;
+        const T d20 = v2x * v0x + v2y * v0y + v2z * v0z;
+        const T d21 = v2x * v1x + v2y * v1y + v2z * v1z;
+
+        const T inv_denom = T(1) / (d00 * d11 - d01 * d01);
+        const T v = (d11 * d20 - d01 * d21) * inv_denom;
+        const T w = (d00 * d21 - d01 * d20) * inv_denom;
+        const T u = T(1) - v - w;
+
+        w0[0] = u;
+        w1[0] = v;
+        w2[0] = w;
+    }
+
     template <typename G, typename T, typename I>
     int interpolant_cpu(const ptrdiff_t npoints,
                         const G *const SSDF_RESTRICT x,
@@ -33,26 +69,7 @@ namespace ssdf {
             const G ax = sx[i0], ay = sy[i0], az = sz[i0];
             const G bx = sx[i1], by = sy[i1], bz = sz[i1];
             const G cx = sx[i2], cy = sy[i2], cz = sz[i2];
-            const G px = x[i], py = y[i], pz = z[i];
-
-            const G v0x = bx - ax, v0y = by - ay, v0z = bz - az;
-            const G v1x = cx - ax, v1y = cy - ay, v1z = cz - az;
-            const G v2x = px - ax, v2y = py - ay, v2z = pz - az;
-
-            const G d00 = v0x * v0x + v0y * v0y + v0z * v0z;
-            const G d01 = v0x * v1x + v0y * v1y + v0z * v1z;
-            const G d11 = v1x * v1x + v1y * v1y + v1z * v1z;
-            const G d20 = v2x * v0x + v2y * v0y + v2z * v0z;
-            const G d21 = v2x * v1x + v2y * v1y + v2z * v1z;
-
-            const G invDenom = G(1) / (d00 * d11 - d01 * d01);
-            const G v = (d11 * d20 - d01 * d21) * invDenom;
-            const G w = (d00 * d21 - d01 * d20) * invDenom;
-            const G u = G(1) - v - w;
-
-            w0[i] = (T)u;
-            w1[i] = (T)v;
-            w2[i] = (T)w;
+            barycentric_coordinates<T>(x[i], y[i], z[i], ax, ay, az, bx, by, bz, cx, cy, cz, &w0[i], &w1[i], &w2[i]);
         }
 
         return 0;
