@@ -50,7 +50,7 @@ int main() {
                        sy.data(),
                        sz.data(),
                        out_ref.data());
-    ssdf::edf_celllist<G, T, I>(npt,
+    ssdf::edf_select<G, T, I>(npt,
                                 x.data(),
                                 y.data(),
                                 z.data(),

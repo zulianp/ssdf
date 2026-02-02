@@ -32,7 +32,7 @@ int main() {
     }
 
     // Call sdf function (use celllist variant for correctness check)
-    int result = ssdf::edf_celllist(npoints, x, y, z, nselements, s0, s1, s2, nspoints, sx, sy, sz, out);
+    int result = ssdf::edf_select(npoints, x, y, z, nselements, s0, s1, s2, nspoints, sx, sy, sz, out);
 
     assert(result == 0);
 
