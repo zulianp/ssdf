@@ -1,5 +1,8 @@
 #include "bvh.hpp"
 
+#define CUBQL_GPU_BUILDER_IMPLEMENTATION 1
+#define CUBQL_TRIANGLE_CPAT_IMPLEMENTATION 1
+
 #include "cuBQL/bvh.h"
 #include "cuBQL/queries/triangleData/closestPointOnAnyTriangle.h"
 
