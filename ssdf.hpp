@@ -789,7 +789,7 @@ namespace ssdf {
         SSDF_READ_ENV(SSDF_USE_CELL_LIST, atoi);
         SSDF_READ_ENV(SSDF_CELL_VALIDATE, atoi);
 #ifdef SSDF_ENABLE_CUBIQL
-        int SSDF_USE_BVH = 0;
+        int SSDF_USE_BVH = 1;
         SSDF_READ_ENV(SSDF_USE_BVH, atoi);
         if (SSDF_USE_BVH) {
             return edf_bvh<G, T, I>(npoints, x, y, z, nselements, s0, s1, s2, nspoints, sx, sy, sz, out);

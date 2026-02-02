@@ -170,7 +170,13 @@ if(SSDF_TEST_TARGETS)
 endif()
 
 if(SSDF_ENABLE_CUBIQL)
-    add_subdirectory(/Users/patrickzulian/Desktop/code/installations/sources/cuBQL "${CMAKE_BINARY_DIR}/_deps/cuBQL-build")
+    # Check if cuBQL_DIR is set and use it if it is
+    if(NOT cuBQL_DIR)
+        message(FATAL_ERROR "cuBQL_DIR is not set")
+    endif()
+
+    add_subdirectory(${cuBQL_DIR} "${CMAKE_BINARY_DIR}/_deps/cuBQL-build")
+    
     target_link_libraries(ssdf PRIVATE cuBQL)
     add_subdirectory(bvh)
     add_definitions("-DSSDF_ENABLE_CUBIQL")

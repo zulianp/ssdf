@@ -13,6 +13,7 @@
 - **MPI**: For distributed memory parallelization (Available)
 - **CUDA**: For GPU acceleration (TODO)
 - **HIP**: For AMD GPU acceleration (TODO)
+- **cuBQL**: For BVH datastructures, fastest implementation a.t.m. (https://github.com/NVIDIA/cuBQL.git)
 
 ### Building the Project
 
@@ -33,10 +34,16 @@
    cmake ..
    ```
    
-   Or with optional dependencies:
+   With optional dependencies:
    ```bash
    cmake -DSSDF_ENABLE_MPI=ON -DSSDF_ENABLE_OPENMP=ON ..
    ```
+
+   With CUBQL
+   ```bash
+   cmake -DSSDF_ENABLE_MPI=ON -DSSDF_ENABLE_OPENMP=ON -DSSDF_ENABLE_CUBIQL=ON -DcuBQL_DIR=<CUBQL_PROJECT_FOLDER> ..
+   ```
+
 
 4. **Build:**
    ```bash
