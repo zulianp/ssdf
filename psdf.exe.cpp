@@ -220,13 +220,33 @@ int main(int argc, char **argv) {
 
     // Output buffer
 
+    bool isupdate = false;
+
     const char *SSDF_INPUT_SDF = std::getenv("SSDF_INPUT_SDF");
 
     std::vector<T> out;
     if (SSDF_INPUT_SDF) {
         mpi_read_distributed<T>(SSDF_INPUT_SDF, out, comm, npoints_global, points_offset);
+        isupdate = true;
     } else {
-        out.resize(lnpoints, 10000);
+        int SSDF_INIT_WITH_VOLUME_BOX = 0;
+        SSDF_READ_ENV(SSDF_INIT_WITH_VOLUME_BOX, std::stoi);
+        if (SSDF_INIT_WITH_VOLUME_BOX) {
+            out.resize(lnpoints);
+            G xmin, xmax, ymin, ymax, zmin, zmax;
+            ssdf::compute_aabb(comm, lnpoints, x.data(), y.data(), z.data(), &xmin, &xmax, &ymin, &ymax, &zmin, &zmax);
+            ssdf::all_points_aabb_signed_distance<G, T>(
+                lnpoints, x.data(), y.data(), z.data(), xmin, xmax, ymin, ymax, zmin, zmax, out.data());
+
+#pragma omp parallel for
+            for (ptrdiff_t i = 0; i < lnpoints; i++) {
+                out[i] = std::abs(out[i]);
+            }
+
+            isupdate = true;
+        } else {
+            out.resize(lnpoints, std::numeric_limits<T>::max());
+        }
     }
 
     if (!rank) {
@@ -258,20 +278,37 @@ int main(int argc, char **argv) {
             sz_double[i] = double(sz[i]);
         }
 
-        ssdf::pedf<double, double, I>(comm,
-                                      lnpoints,
-                                      x_double.data(),
-                                      y_double.data(),
-                                      z_double.data(),
-                                      static_cast<ptrdiff_t>(s0.size()),
-                                      s0.data(),
-                                      s1.data(),
-                                      s2.data(),
-                                      static_cast<ptrdiff_t>(sx.size()),
-                                      sx_double.data(),
-                                      sy_double.data(),
-                                      sz_double.data(),
-                                      out_double.data());
+        if (isupdate) {
+            ssdf::pedf_update<double, double, I>(comm,
+                                                 lnpoints,
+                                                 x_double.data(),
+                                                 y_double.data(),
+                                                 z_double.data(),
+                                                 static_cast<ptrdiff_t>(s0.size()),
+                                                 s0.data(),
+                                                 s1.data(),
+                                                 s2.data(),
+                                                 static_cast<ptrdiff_t>(sx.size()),
+                                                 sx_double.data(),
+                                                 sy_double.data(),
+                                                 sz_double.data(),
+                                                 out_double.data());
+        } else {
+            ssdf::pedf<double, double, I>(comm,
+                                          lnpoints,
+                                          x_double.data(),
+                                          y_double.data(),
+                                          z_double.data(),
+                                          static_cast<ptrdiff_t>(s0.size()),
+                                          s0.data(),
+                                          s1.data(),
+                                          s2.data(),
+                                          static_cast<ptrdiff_t>(sx.size()),
+                                          sx_double.data(),
+                                          sy_double.data(),
+                                          sz_double.data(),
+                                          out_double.data());
+        }
 
         // Convert output to float
         for (ptrdiff_t i = 0; i < lnpoints; ++i) {
@@ -279,25 +316,22 @@ int main(int argc, char **argv) {
         }
 
     } else {
-        // if(SSDF_INPUT_SDF) {
-        //     printf("Using update mode with input SDF!\n");
-        //     ssdf::pedf_update<G, T, I>(comm,
-        //         lnpoints,
-        //         x.data(),
-        //         y.data(),
-        //         z.data(),
-        //         static_cast<ptrdiff_t>(s0.size()),
-        //         s0.data(),
-        //         s1.data(),
-        //         s2.data(),
-        //         static_cast<ptrdiff_t>(sx.size()),
-        //         sx.data(),
-        //         sy.data(),
-        //         sz.data(),
-        //         out.data());
-
-        // } else
-        {
+        if (isupdate) {
+            ssdf::pedf_update<G, T, I>(comm,
+                                       lnpoints,
+                                       x.data(),
+                                       y.data(),
+                                       z.data(),
+                                       static_cast<ptrdiff_t>(s0.size()),
+                                       s0.data(),
+                                       s1.data(),
+                                       s2.data(),
+                                       static_cast<ptrdiff_t>(sx.size()),
+                                       sx.data(),
+                                       sy.data(),
+                                       sz.data(),
+                                       out.data());
+        } else {
             ssdf::pedf<G, T, I>(comm,
                                 lnpoints,
                                 x.data(),

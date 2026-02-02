@@ -11,7 +11,7 @@
 
 - **OpenMP**: For shared memory parallelization (Avaialble)
 - **MPI**: For distributed memory parallelization (Available)
-- **CUDA**: For GPU acceleration (TODO)
+- **CUDA**: For GPU acceleration (Rough integration with cuBQL)
 - **HIP**: For AMD GPU acceleration (TODO)
 - **cuBQL**: For BVH datastructures, fastest implementation a.t.m. (https://github.com/NVIDIA/cuBQL.git)
 
