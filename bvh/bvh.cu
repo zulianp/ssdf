@@ -5,6 +5,13 @@
 
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 
+using cuBQL::box3f;
+using cuBQL::bvh3f;
+using cuBQL::divRoundUp;
+using cuBQL::Triangle;
+using cuBQL::vec3f;
+
+
 /*! generate boxes (required for bvh builder) from prim type 'index line triangles' */
 __global__ void edf_bvh_cuda_generate_boxes_kernel(box3f *boxForBuilder, const Triangle *triangles, int numTriangles) {
     int tid = threadIdx.x + blockIdx.x * blockDim.x;
@@ -45,11 +52,6 @@ int edf_bvh_cuda(const ptrdiff_t npoints,
                  const G *const SSDF_RESTRICT sy,
                  const G *const SSDF_RESTRICT sz,
                  T *const SSDF_RESTRICT out) {
-    using cuBQL::box3f;
-    using cuBQL::bvh3f;
-    using cuBQL::divRoundUp;
-    using cuBQL::Triangle;
-    using cuBQL::vec3f;
 
     const G *d_x = 0;
     CUBQL_CUDA_CALL(Malloc((void**)&d_x, npoints*sizeof(G)));
