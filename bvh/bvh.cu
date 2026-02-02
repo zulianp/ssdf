@@ -83,7 +83,7 @@ int edf_bvh_cuda(const ptrdiff_t npoints,
     CUBQL_CUDA_CALL(Free(d_boxes));
 
     bvh3f d_bvh;
-    cuBQL::CudaBuilder(d_bvh, d_boxes, nselements, cuBQL::BuildConfig());
+    cuBQL::gpuBuilder(d_bvh, d_boxes, nselements, cuBQL::BuildConfig());
 
     edf_bvh_cuda_queries_kernel<<<divRoundUp(npoints, ptrdiff_t(256)), 256>>>(d_bvh, d_triangles, npoints, d_x, d_y, d_z, d_out);
 
