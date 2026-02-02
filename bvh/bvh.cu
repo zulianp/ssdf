@@ -53,13 +53,13 @@ int edf_bvh_cuda(const ptrdiff_t npoints,
                  const G *const SSDF_RESTRICT sz,
                  T *const SSDF_RESTRICT out) {
 
-    const G *d_x = 0;
+    G *d_x = 0;
     CUBQL_CUDA_CALL(Malloc((void**)&d_x, npoints*sizeof(G)));
     CUBQL_CUDA_CALL(Memcpy(d_x, x, npoints*sizeof(G), cudaMemcpyHostToDevice));
-    const G *d_y = 0;
+    G *d_y = 0;
     CUBQL_CUDA_CALL(Malloc((void**)&d_y, npoints*sizeof(G)));
     CUBQL_CUDA_CALL(Memcpy(d_y, y, npoints*sizeof(G), cudaMemcpyHostToDevice));
-    const G *d_z = 0;
+    G *d_z = 0;
     CUBQL_CUDA_CALL(Malloc((void**)&d_z, npoints*sizeof(G)));
     CUBQL_CUDA_CALL(Memcpy(d_z, z, npoints*sizeof(G), cudaMemcpyHostToDevice));
 
