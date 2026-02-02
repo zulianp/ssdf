@@ -84,13 +84,16 @@ namespace ssdf {
         CUBQL_CUDA_CALL(Malloc((void **)&d_boxes, nselements * sizeof(box3f)));
         edf_bvh_cuda_generate_boxes_kernel<<<divRoundUp(nselements, ptrdiff_t(256)), 256>>>(
             d_boxes, d_triangles, nselements);
-        CUBQL_CUDA_CALL(Free(d_boxes));
+
+        CUBQL_CUDA_SYNC_CHECK();
 
         bvh3f d_bvh;
         cuBQL::gpuBuilder(d_bvh, d_boxes, nselements, cuBQL::BuildConfig());
 
         edf_bvh_cuda_queries_kernel<<<divRoundUp(npoints, ptrdiff_t(256)), 256>>>(
             d_bvh, d_triangles, npoints, d_x, d_y, d_z, d_out);
+
+        CUBQL_CUDA_SYNC_CHECK();
 
         CUBQL_CUDA_CALL(Memcpy(out, d_out, npoints * sizeof(T), cudaMemcpyDeviceToHost));
 
