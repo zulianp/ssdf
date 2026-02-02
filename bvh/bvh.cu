@@ -79,7 +79,7 @@ int edf_bvh_cuda(const ptrdiff_t npoints,
 
     box3f *d_boxes = 0;
     CUBQL_CUDA_CALL(Malloc((void**)&d_boxes, nselements * sizeof(box3f)));
-    edf_bvh_cuda_generate_boxes_kernel<<<divRoundUp(nselements, 256), 256>>>(d_boxes, d_triangles, nselements);
+    edf_bvh_cuda_generate_boxes_kernel<<<divRoundUp(nselements, ptrdiff_t(256)), 256>>>(d_boxes, d_triangles, nselements);
     CUBQL_CUDA_CALL(Free(d_boxes));
 
     bvh3f d_bvh;
