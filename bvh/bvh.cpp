@@ -1,6 +1,7 @@
 #include "bvh.hpp"
 
 #include "cuBQL/queries/triangleData/closestPointOnAnyTriangle.h"
+#include "cuBQL/queries/triangleData/pointInsideOutside.h"
 
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 
@@ -130,7 +131,7 @@ namespace ssdf {
             for (int tid = 0; tid < numQueries; tid++) {
                 vec3f queryPoint(x[tid], y[tid], z[tid]);
                 cuBQL::triangles::CPAT cpat;
-                cpat.sqrDist = outd[tid]*outd[tid];
+                cpat.sqrDist = outd[tid] * outd[tid];
                 cpat.runQuery(triangles, trianglesBVH, queryPoint);
                 const T dist = sqrt(cpat.sqrDist);
                 if (outd[tid] > dist) {
@@ -216,7 +217,7 @@ namespace ssdf {
             for (int tid = 0; tid < numQueries; tid++) {
                 vec3f queryPoint(x[tid], y[tid], z[tid]);
                 cuBQL::triangles::CPAT cpat;
-                cpat.sqrDist = out[tid]*out[tid];
+                cpat.sqrDist = out[tid] * out[tid];
                 cpat.runQuery(triangles, trianglesBVH, queryPoint);
                 out[tid] = MIN(out[tid], sqrt(cpat.sqrDist));
             }
@@ -264,6 +265,53 @@ namespace ssdf {
         return edf_bvh_cpu<G, T, I>(npoints, x, y, z, nselements, s0, s1, s2, nspoints, sx, sy, sz, out);
     }
 
+    template <typename G, typename I>
+    int points_inside_bvh_cpu(const ptrdiff_t npoints,
+                              const G *const SSDF_RESTRICT x,
+                              const G *const SSDF_RESTRICT y,
+                              const G *const SSDF_RESTRICT z,
+                              const ptrdiff_t nselements,
+                              const I *const SSDF_RESTRICT s0,
+                              const I *const SSDF_RESTRICT s1,
+                              const I *const SSDF_RESTRICT s2,
+                              const ptrdiff_t nspoints,
+                              const G *const SSDF_RESTRICT sx,
+                              const G *const SSDF_RESTRICT sy,
+                              const G *const SSDF_RESTRICT sz,
+                              uint8_t *const SSDF_RESTRICT out) {
+        using cuBQL::box3f;
+        using cuBQL::bvh3f;
+        using cuBQL::Triangle;
+        using cuBQL::vec3f;
+        using bvh_t = bvh3f;
+
+        std::vector<box3f> boxes(nselements);
+        for (ptrdiff_t i = 0; i < nselements; i++) {
+            auto tri = Triangle(vec3f(sx[s0[i]], sy[s0[i]], sz[s0[i]]),
+                                vec3f(sx[s1[i]], sy[s1[i]], sz[s1[i]]),
+                                vec3f(sx[s2[i]], sy[s2[i]], sz[s2[i]]));
+            boxes[i] = tri.bounds();
+        }
+
+        bvh_t trianglesBVH;
+        cuBQL::cpuBuilder(trianglesBVH, boxes.data(), boxes.size(), cuBQL::BuildConfig());
+
+        auto getTriangle = [s0, s1, s2, sx, sy, sz](uint32_t primID) {
+            return Triangle(vec3f(sx[s0[primID]], sy[s0[primID]], sz[s0[primID]]),
+                            vec3f(sx[s1[primID]], sy[s1[primID]], sz[s1[primID]]),
+                            vec3f(sx[s2[primID]], sy[s2[primID]], sz[s2[primID]]));
+        };
+
+#pragma omp parallel for
+        for (int tid = 0; tid < npoints; tid++) {
+            vec3f queryPoint(x[tid], y[tid], z[tid]);
+            bool inside = cuBQL::triangles::pointIsInsideSurface(trianglesBVH, getTriangle, queryPoint);
+            out[tid] = inside;
+        }
+
+        return 0;
+    }
+
     template int closest_point_bvh<float, double, int>(const ptrdiff_t,
                                                        const float *const SSDF_RESTRICT,
                                                        const float *const SSDF_RESTRICT,
@@ -282,41 +330,41 @@ namespace ssdf {
                                                        float *const SSDF_RESTRICT,
                                                        int *const SSDF_RESTRICT);
 
-    // template int closest_point_bvh<double, double, int>(const ptrdiff_t,
-    //                                                     const double *const SSDF_RESTRICT,
-    //                                                     const double *const SSDF_RESTRICT,
-    //                                                     const double *const SSDF_RESTRICT,
-    //                                                     const ptrdiff_t,
-    //                                                     const int *const SSDF_RESTRICT,
-    //                                                     const int *const SSDF_RESTRICT,
-    //                                                     const int *const SSDF_RESTRICT,
-    //                                                     const ptrdiff_t,
-    //                                                     const double *const SSDF_RESTRICT,
-    //                                                     const double *const SSDF_RESTRICT,
-    //                                                     const double *const SSDF_RESTRICT,
-    //                                                     double *const SSDF_RESTRICT,
-    //                                                     double *const SSDF_RESTRICT,
-    //                                                     double *const SSDF_RESTRICT,
-    //                                                     double *const SSDF_RESTRICT,
-    //                                                     int *const SSDF_RESTRICT);
+    template int closest_point_bvh<double, double, int>(const ptrdiff_t,
+                                                        const double *const SSDF_RESTRICT,
+                                                        const double *const SSDF_RESTRICT,
+                                                        const double *const SSDF_RESTRICT,
+                                                        const ptrdiff_t,
+                                                        const int *const SSDF_RESTRICT,
+                                                        const int *const SSDF_RESTRICT,
+                                                        const int *const SSDF_RESTRICT,
+                                                        const ptrdiff_t,
+                                                        const double *const SSDF_RESTRICT,
+                                                        const double *const SSDF_RESTRICT,
+                                                        const double *const SSDF_RESTRICT,
+                                                        double *const SSDF_RESTRICT,
+                                                        double *const SSDF_RESTRICT,
+                                                        double *const SSDF_RESTRICT,
+                                                        double *const SSDF_RESTRICT,
+                                                        int *const SSDF_RESTRICT);
 
-    // template int closest_point_bvh<float, float, int>(const ptrdiff_t,
-    //                                                   const float *const SSDF_RESTRICT,
-    //                                                   const float *const SSDF_RESTRICT,
-    //                                                   const float *const SSDF_RESTRICT,
-    //                                                   const ptrdiff_t,
-    //                                                   const int *const SSDF_RESTRICT,
-    //                                                   const int *const SSDF_RESTRICT,
-    //                                                   const int *const SSDF_RESTRICT,
-    //                                                   const ptrdiff_t,
-    //                                                   const float *const SSDF_RESTRICT,
-    //                                                   const float *const SSDF_RESTRICT,
-    //                                                   const float *const SSDF_RESTRICT,
-    //                                                   float *const SSDF_RESTRICT,
-    //                                                   float *const SSDF_RESTRICT,
-    //                                                   float *const SSDF_RESTRICT,
-    //                                                   float *const SSDF_RESTRICT,
-    //                                                   int *const SSDF_RESTRICT);
+    template int closest_point_bvh<float, float, int>(const ptrdiff_t,
+                                                      const float *const SSDF_RESTRICT,
+                                                      const float *const SSDF_RESTRICT,
+                                                      const float *const SSDF_RESTRICT,
+                                                      const ptrdiff_t,
+                                                      const int *const SSDF_RESTRICT,
+                                                      const int *const SSDF_RESTRICT,
+                                                      const int *const SSDF_RESTRICT,
+                                                      const ptrdiff_t,
+                                                      const float *const SSDF_RESTRICT,
+                                                      const float *const SSDF_RESTRICT,
+                                                      const float *const SSDF_RESTRICT,
+                                                      float *const SSDF_RESTRICT,
+                                                      float *const SSDF_RESTRICT,
+                                                      float *const SSDF_RESTRICT,
+                                                      float *const SSDF_RESTRICT,
+                                                      int *const SSDF_RESTRICT);
 
     template int edf_bvh<float, double, int>(const ptrdiff_t,
                                              const float *const SSDF_RESTRICT,
@@ -359,4 +407,18 @@ namespace ssdf {
                                               const double *const SSDF_RESTRICT,
                                               const double *const SSDF_RESTRICT,
                                               double *const SSDF_RESTRICT);
+
+    template int points_inside_bvh_cpu<float, int>(const ptrdiff_t npoints,
+                                                   const float *const SSDF_RESTRICT x,
+                                                   const float *const SSDF_RESTRICT y,
+                                                   const float *const SSDF_RESTRICT z,
+                                                   const ptrdiff_t nselements,
+                                                   const int *const SSDF_RESTRICT s0,
+                                                   const int *const SSDF_RESTRICT s1,
+                                                   const int *const SSDF_RESTRICT s2,
+                                                   const ptrdiff_t nspoints,
+                                                   const float *const SSDF_RESTRICT sx,
+                                                   const float *const SSDF_RESTRICT sy,
+                                                   const float *const SSDF_RESTRICT sz,
+                                                   uint8_t *const SSDF_RESTRICT out);
 }  // namespace ssdf
