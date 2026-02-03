@@ -36,6 +36,7 @@ __global__ void edf_bvh_cuda_queries_kernel(bvh3f trianglesBVH,
 
     vec3f queryPoint(x[tid], y[tid], z[tid]);
     cuBQL::triangles::CPAT cpat;
+    cpat.sqrDist = out[tid];
     cpat.runQuery(triangles, trianglesBVH, queryPoint);
     out[tid] = MIN(out[tid], sqrt(cpat.sqrDist));
 }

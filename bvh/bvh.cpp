@@ -7,21 +7,21 @@
 namespace ssdf {
 
     template <typename T>
-    static inline void barycentric_coordinates(const T px,
-                                               const T py,
-                                               const T pz,
-                                               const T ax,
-                                               const T ay,
-                                               const T az,
-                                               const T bx,
-                                               const T by,
-                                               const T bz,
-                                               const T cx,
-                                               const T cy,
-                                               const T cz,
-                                               T *const SSDF_RESTRICT w0,
-                                               T *const SSDF_RESTRICT w1,
-                                               T *const SSDF_RESTRICT w2) {
+    static inline void triangle_local_coordinates(const T px,
+                                                  const T py,
+                                                  const T pz,
+                                                  const T ax,
+                                                  const T ay,
+                                                  const T az,
+                                                  const T bx,
+                                                  const T by,
+                                                  const T bz,
+                                                  const T cx,
+                                                  const T cy,
+                                                  const T cz,
+                                                  T *const SSDF_RESTRICT w0,
+                                                  T *const SSDF_RESTRICT w1,
+                                                  T *const SSDF_RESTRICT w2) {
         const T v0x = bx - ax, v0y = by - ay, v0z = bz - az;
         const T v1x = cx - ax, v1y = cy - ay, v1z = cz - az;
         const T v2x = px - ax, v2y = py - ay, v2z = pz - az;
@@ -69,7 +69,7 @@ namespace ssdf {
             const G ax = sx[i0], ay = sy[i0], az = sz[i0];
             const G bx = sx[i1], by = sy[i1], bz = sz[i1];
             const G cx = sx[i2], cy = sy[i2], cz = sz[i2];
-            barycentric_coordinates<T>(x[i], y[i], z[i], ax, ay, az, bx, by, bz, cx, cy, cz, &w0[i], &w1[i], &w2[i]);
+            triangle_local_coordinates<T>(x[i], y[i], z[i], ax, ay, az, bx, by, bz, cx, cy, cz, &w0[i], &w1[i], &w2[i]);
         }
 
         return 0;
@@ -130,6 +130,7 @@ namespace ssdf {
             for (int tid = 0; tid < numQueries; tid++) {
                 vec3f queryPoint(x[tid], y[tid], z[tid]);
                 cuBQL::triangles::CPAT cpat;
+                cpat.sqrDist = outd[tid];
                 cpat.runQuery(triangles, trianglesBVH, queryPoint);
                 const T dist = sqrt(cpat.sqrDist);
                 if (outd[tid] > dist) {
@@ -215,6 +216,7 @@ namespace ssdf {
             for (int tid = 0; tid < numQueries; tid++) {
                 vec3f queryPoint(x[tid], y[tid], z[tid]);
                 cuBQL::triangles::CPAT cpat;
+                cpat.sqrDist = out[tid];
                 cpat.runQuery(triangles, trianglesBVH, queryPoint);
                 out[tid] = MIN(out[tid], sqrt(cpat.sqrDist));
             }
