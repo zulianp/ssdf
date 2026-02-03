@@ -266,19 +266,19 @@ namespace ssdf {
     }
 
     template <typename G, typename I>
-    int points_inside_bvh_cpu(const ptrdiff_t npoints,
-                              const G *const SSDF_RESTRICT x,
-                              const G *const SSDF_RESTRICT y,
-                              const G *const SSDF_RESTRICT z,
-                              const ptrdiff_t nselements,
-                              const I *const SSDF_RESTRICT s0,
-                              const I *const SSDF_RESTRICT s1,
-                              const I *const SSDF_RESTRICT s2,
-                              const ptrdiff_t nspoints,
-                              const G *const SSDF_RESTRICT sx,
-                              const G *const SSDF_RESTRICT sy,
-                              const G *const SSDF_RESTRICT sz,
-                              uint8_t *const SSDF_RESTRICT out) {
+    int points_inside_bvh(const ptrdiff_t npoints,
+                          const G *const SSDF_RESTRICT x,
+                          const G *const SSDF_RESTRICT y,
+                          const G *const SSDF_RESTRICT z,
+                          const ptrdiff_t nselements,
+                          const I *const SSDF_RESTRICT s0,
+                          const I *const SSDF_RESTRICT s1,
+                          const I *const SSDF_RESTRICT s2,
+                          const ptrdiff_t nspoints,
+                          const G *const SSDF_RESTRICT sx,
+                          const G *const SSDF_RESTRICT sy,
+                          const G *const SSDF_RESTRICT sz,
+                          uint8_t *const SSDF_RESTRICT out) {
         using cuBQL::box3f;
         using cuBQL::bvh3f;
         using cuBQL::Triangle;
@@ -408,17 +408,17 @@ namespace ssdf {
                                               const double *const SSDF_RESTRICT,
                                               double *const SSDF_RESTRICT);
 
-    template int points_inside_bvh_cpu<float, int>(const ptrdiff_t npoints,
-                                                   const float *const SSDF_RESTRICT x,
-                                                   const float *const SSDF_RESTRICT y,
-                                                   const float *const SSDF_RESTRICT z,
-                                                   const ptrdiff_t nselements,
-                                                   const int *const SSDF_RESTRICT s0,
-                                                   const int *const SSDF_RESTRICT s1,
-                                                   const int *const SSDF_RESTRICT s2,
-                                                   const ptrdiff_t nspoints,
-                                                   const float *const SSDF_RESTRICT sx,
-                                                   const float *const SSDF_RESTRICT sy,
-                                                   const float *const SSDF_RESTRICT sz,
-                                                   uint8_t *const SSDF_RESTRICT out);
+    template int points_inside_bvh<float, int>(const ptrdiff_t,
+                                               const float *const SSDF_RESTRICT,
+                                               const float *const SSDF_RESTRICT,
+                                               const float *const SSDF_RESTRICT,
+                                               const ptrdiff_t,
+                                               const int *const SSDF_RESTRICT,
+                                               const int *const SSDF_RESTRICT,
+                                               const int *const SSDF_RESTRICT,
+                                               const ptrdiff_t,
+                                               const float *const SSDF_RESTRICT,
+                                               const float *const SSDF_RESTRICT,
+                                               const float *const SSDF_RESTRICT,
+                                               uint8_t *const SSDF_RESTRICT);
 }  // namespace ssdf
