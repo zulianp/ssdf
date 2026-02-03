@@ -1,3 +1,6 @@
+#ifndef SSDF_DISTRIBUTED_PSDF_HPP
+#define SSDF_DISTRIBUTED_PSDF_HPP
+
 #include <mpi.h>
 #include <algorithm>
 #include <limits>
@@ -657,3 +660,5 @@ namespace ssdf {
     }
 
 }  // namespace ssdf
+
+#endif  // SSDF_DISTRIBUTED_PSDF_HPP

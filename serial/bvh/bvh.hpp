@@ -3,6 +3,8 @@
 
 #include <stddef.h>
 
+#include "ssdf_config.hpp"
+
 #ifndef SSDF_RESTRICT
 #ifndef _WIN32
 #define SSDF_RESTRICT __restrict__

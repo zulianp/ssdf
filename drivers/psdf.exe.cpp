@@ -15,71 +15,7 @@
 #include <string>
 #include <vector>
 
-#include "psdf.hpp"
-
-namespace {
-
-    // Collective distributed read: each rank gets a contiguous chunk
-    template <typename T>
-    ptrdiff_t mpi_read_distributed(const std::string &path,
-                                   std::vector<T> &local,
-                                   MPI_Comm comm,
-                                   ptrdiff_t &global_count,
-                                   ptrdiff_t &offset_out) {
-        int rank = 0, size = 0;
-        MPI_Comm_rank(comm, &rank);
-        MPI_Comm_size(comm, &size);
-
-        MPI_File fh;
-        if (MPI_File_open(comm, path.c_str(), MPI_MODE_RDONLY, MPI_INFO_NULL, &fh) != MPI_SUCCESS) {
-            if (rank == 0) std::fprintf(stderr, "Error: cannot open %s\n", path.c_str());
-            MPI_Abort(comm, 1);
-        }
-
-        MPI_Offset fsize = 0;
-        MPI_File_get_size(fh, &fsize);
-        const MPI_Datatype dtype = ssdf::mpi_type<T>();
-        const ptrdiff_t elem_size = static_cast<ptrdiff_t>(sizeof(T));
-        if (fsize % elem_size != 0) {
-            if (rank == 0) std::fprintf(stderr, "Error: size mismatch for %s\n", path.c_str());
-            MPI_Abort(comm, 1);
-        }
-        global_count = static_cast<ptrdiff_t>(fsize / elem_size);
-
-        const ptrdiff_t base = global_count / size;
-        const ptrdiff_t rem = global_count % size;
-        const ptrdiff_t local_count = base + (rank < rem ? 1 : 0);
-        const ptrdiff_t offset = base * rank + std::min<ptrdiff_t>(rank, rem);
-        offset_out = offset;
-
-        local.resize(local_count);
-        const MPI_Offset disp = static_cast<MPI_Offset>(offset * elem_size);
-        MPI_File_set_view(fh, disp, dtype, dtype, "native", MPI_INFO_NULL);
-        MPI_Status st;
-        MPI_File_read_at_all(fh, 0, local.data(), static_cast<int>(local_count), dtype, &st);
-        MPI_File_close(&fh);
-        return local_count;
-    }
-
-    // Write distributed array (contiguous partition) to file
-    template <typename T>
-    void mpi_write_distributed(const std::string &path, const std::vector<T> &local, ptrdiff_t offset, MPI_Comm comm) {
-        int rank = 0;
-        MPI_Comm_rank(comm, &rank);
-        MPI_File fh;
-        if (MPI_File_open(comm, path.c_str(), MPI_MODE_CREATE | MPI_MODE_WRONLY, MPI_INFO_NULL, &fh) != MPI_SUCCESS) {
-            if (rank == 0) std::fprintf(stderr, "Error: cannot open output %s\n", path.c_str());
-            MPI_Abort(comm, 1);
-        }
-        const MPI_Datatype dtype = ssdf::mpi_type<T>();
-        const MPI_Offset disp = static_cast<MPI_Offset>(offset * static_cast<ptrdiff_t>(sizeof(T)));
-        MPI_File_set_view(fh, disp, dtype, dtype, "native", MPI_INFO_NULL);
-        MPI_Status st;
-        MPI_File_write_at_all(fh, 0, local.data(), static_cast<int>(local.size()), dtype, &st);
-        MPI_File_close(&fh);
-    }
-
-}  // namespace
+#include "distributed/mpi_io.hpp"
 
 int main(int argc, char **argv) {
     MPI_Init(&argc, &argv);
@@ -119,17 +55,17 @@ int main(int argc, char **argv) {
     // Read surface points (distributed)
     ptrdiff_t surf_nspoints = 0, surf_sp_offset = 0;
     std::vector<G> sx, sy, sz;
-    mpi_read_distributed<G>(make_path(surf_folder, "x.raw"), sx, comm, surf_nspoints, surf_sp_offset);
+    ssdf::mpi_io::read_distributed<G>(make_path(surf_folder, "x.raw"), sx, comm, surf_nspoints, surf_sp_offset);
     ptrdiff_t tmp_global = 0, tmp_off = 0;
-    mpi_read_distributed<G>(make_path(surf_folder, "y.raw"), sy, comm, tmp_global, tmp_off);
-    mpi_read_distributed<G>(make_path(surf_folder, "z.raw"), sz, comm, tmp_global, tmp_off);
+    ssdf::mpi_io::read_distributed<G>(make_path(surf_folder, "y.raw"), sy, comm, tmp_global, tmp_off);
+    ssdf::mpi_io::read_distributed<G>(make_path(surf_folder, "z.raw"), sz, comm, tmp_global, tmp_off);
 
     // Read surface indices (distributed)
     ptrdiff_t surf_nselements = 0, surf_se_offset = 0;
     std::vector<I> s0, s1, s2;
-    mpi_read_distributed<I>(make_path(surf_folder, "i0.raw"), s0, comm, surf_nselements, surf_se_offset);
-    mpi_read_distributed<I>(make_path(surf_folder, "i1.raw"), s1, comm, tmp_global, tmp_off);
-    mpi_read_distributed<I>(make_path(surf_folder, "i2.raw"), s2, comm, tmp_global, tmp_off);
+    ssdf::mpi_io::read_distributed<I>(make_path(surf_folder, "i0.raw"), s0, comm, surf_nselements, surf_se_offset);
+    ssdf::mpi_io::read_distributed<I>(make_path(surf_folder, "i1.raw"), s1, comm, tmp_global, tmp_off);
+    ssdf::mpi_io::read_distributed<I>(make_path(surf_folder, "i2.raw"), s2, comm, tmp_global, tmp_off);
 
     // Compact indices and points: gather all surface points, then keep only those referenced by local triangles
     {
@@ -213,9 +149,9 @@ int main(int argc, char **argv) {
     // Read points (distributed)
     ptrdiff_t npoints_global = 0, points_offset = 0;
     std::vector<G> x, y, z;
-    mpi_read_distributed<G>(make_path(points_folder, "x.raw"), x, comm, npoints_global, points_offset);
-    mpi_read_distributed<G>(make_path(points_folder, "y.raw"), y, comm, tmp_global, tmp_off);
-    mpi_read_distributed<G>(make_path(points_folder, "z.raw"), z, comm, tmp_global, tmp_off);
+    ssdf::mpi_io::read_distributed<G>(make_path(points_folder, "x.raw"), x, comm, npoints_global, points_offset);
+    ssdf::mpi_io::read_distributed<G>(make_path(points_folder, "y.raw"), y, comm, tmp_global, tmp_off);
+    ssdf::mpi_io::read_distributed<G>(make_path(points_folder, "z.raw"), z, comm, tmp_global, tmp_off);
     const ptrdiff_t lnpoints = static_cast<ptrdiff_t>(x.size());
 
     // Output buffer
@@ -226,7 +162,7 @@ int main(int argc, char **argv) {
 
     std::vector<T> out;
     if (SSDF_INPUT_SDF) {
-        mpi_read_distributed<T>(SSDF_INPUT_SDF, out, comm, npoints_global, points_offset);
+        ssdf::mpi_io::read_distributed<T>(SSDF_INPUT_SDF, out, comm, npoints_global, points_offset);
         isupdate = true;
     } else {
         int SSDF_INIT_WITH_VOLUME_BOX = 0;
@@ -354,7 +290,7 @@ int main(int argc, char **argv) {
     }
 
     // Write output
-    mpi_write_distributed<T>(output_file, out, points_offset, comm);
+    ssdf::mpi_io::write_distributed<T>(output_file, out, points_offset, comm);
 
     MPI_Finalize();
     return 0;

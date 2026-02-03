@@ -1,5 +1,5 @@
 // Basic correctness tests for point_aabb_distance_squared
-#include "../edf/edf.hpp"
+#include "edf/edf.hpp"
 #include <cassert>
 #include <cmath>
 #include <iostream>

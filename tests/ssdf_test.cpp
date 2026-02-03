@@ -1,4 +1,4 @@
-#include "../ssdf.hpp"
+#include "ssdf.hpp"
 #include <cassert>
 #include <cmath>
 #include <iostream>

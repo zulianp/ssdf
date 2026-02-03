@@ -1,4 +1,4 @@
-#include "bvh.hpp"
+#include "bvh/bvh.hpp"
 
 #include "cuBQL/queries/triangleData/closestPointOnAnyTriangle.h"
 #include "cuBQL/queries/triangleData/pointInsideOutside.h"

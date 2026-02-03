@@ -12,10 +12,12 @@
 #include <tuple>
 #include <vector>
 
+#include "ssdf_config.hpp"
+
 #include "edf/edf.hpp"
 
 #ifdef SSDF_ENABLE_CUBIQL
-#include "bvh.hpp"
+#include "bvh/bvh.hpp"
 #endif
 
 

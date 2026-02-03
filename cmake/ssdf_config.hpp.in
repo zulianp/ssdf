@@ -1,0 +1,17 @@
+#ifndef SSDF_CONFIG_HPP
+#define SSDF_CONFIG_HPP
+
+// Project version
+#define SSDF_VERSION "@PROJECT_VERSION@"
+#define SSDF_VERSION_MAJOR @PROJECT_VERSION_MAJOR@
+#define SSDF_VERSION_MINOR @PROJECT_VERSION_MINOR@
+#define SSDF_VERSION_PATCH @PROJECT_VERSION_PATCH@
+
+// Feature availability (defined when enabled at configure time)
+#cmakedefine SSDF_ENABLE_MPI
+#cmakedefine SSDF_ENABLE_OPENMP
+#cmakedefine SSDF_ENABLE_CUDA
+#cmakedefine SSDF_ENABLE_HIP
+#cmakedefine SSDF_ENABLE_CUBIQL
+
+#endif  // SSDF_CONFIG_HPP

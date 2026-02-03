@@ -1,4 +1,4 @@
-#include "bvh.hpp"
+#include "bvh/bvh.hpp"
 
 #define CUBQL_GPU_BUILDER_IMPLEMENTATION 1
 #define CUBQL_TRIANGLE_CPAT_IMPLEMENTATION 1

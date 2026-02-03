@@ -72,6 +72,10 @@ find_package(ssdf REQUIRED)
 target_link_libraries(your_target PRIVATE ssdf::ssdf)
 ```
 
+The build also generates a flat, installable configuration header:
+
+- `#include <ssdf_config.hpp>`: compile-time feature macros (MPI/OpenMP/CUDA/...)
+
 
 # Cite SSDF
 
@@ -95,7 +99,7 @@ Cite SSDF if you use it for your work:
 - Output: `out[i]` is the (unsigned) distance from point i to the surface.
 - Cell-list variant is untesed for now use edf for correctness
 - Optional validation: set `SSDF_CELL_VALIDATE=1` alongside to run both paths and report max difference (copies the cell-list result to `out`).
-- Binary driver: `sdf_exe <surf_folder> <points_folder> <output_file>`
+- Binary driver: `sdf <surf_folder> <points_folder> <output_file>`
   - `surf_folder`: `x.raw,y.raw,z.raw` (float), `i0.raw,i1.raw,i2.raw` (int)
   - `points_folder`: `x.raw,y.raw,z.raw` (float)
   - Output: binary float array of distances
@@ -104,10 +108,15 @@ Cite SSDF if you use it for your work:
 
 - API: `ssdf::pedf<G,T,I>(comm, lnpoints, x, y, z, lnselements, s0, s1, s2, lnspoints, sx, sy, sz, out)`.
 - Data distribution: points and surface are partitioned across ranks.
-- Binary driver: `psdf_exe <surf_folder> <points_folder> <output_file>`
+- Binary driver: `psdf <surf_folder> <points_folder> <output_file>` (requires `-DSSDF_ENABLE_MPI=ON`)
   - Reads SoA `x.raw,y.raw,z.raw` and `i0.raw,i1.raw,i2.raw` via `MPI_File_read_at_all`
   - Writes distributed output with `MPI_File_write_at_all`
   - Optional `SSDF_INPUT_SDF` to initialize output;
+
+## Using the CPU squared-distance SDF (sqedf)
+
+- API: `ssdf::sqedf<G,T,I>(...)` (works on squared distances internally).
+- Binary driver: `sqedf <surf_folder1> [surf_folder2] ... <points_folder> <output_file>`
 
 
 ## Usage within FSI simulations

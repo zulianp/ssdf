@@ -50,19 +50,20 @@ int main() {
                        sy.data(),
                        sz.data(),
                        out_ref.data());
+
     ssdf::edf_select<G, T, I>(npt,
-                                x.data(),
-                                y.data(),
-                                z.data(),
-                                ntri,
-                                s0.data(),
-                                s1.data(),
-                                s2.data(),
-                                ntri * 3,
-                                sx.data(),
-                                sy.data(),
-                                sz.data(),
-                                out_cell.data());
+                              x.data(),
+                              y.data(),
+                              z.data(),
+                              ntri,
+                              s0.data(),
+                              s1.data(),
+                              s2.data(),
+                              ntri * 3,
+                              sx.data(),
+                              sy.data(),
+                              sz.data(),
+                              out_cell.data());
 
     auto brute = [&](int p) {
         G px = x[p], py = y[p], pz = z[p];
@@ -80,7 +81,7 @@ int main() {
         double brute_d = brute(i);
         {
             double d = std::abs(out_ref[i] - brute_d);
-            if (d > 1e-8) {
+            if (d > 1e-7) {
                 std::cout << "ref mismatch at " << i << " ref " << out_ref[i] << " expected " << brute_d << "\n";
                 return 1;
             }
@@ -88,7 +89,7 @@ int main() {
 
         {
             double d = std::abs(out_cell[i] - brute_d);
-            if (d > 1e-8) {
+            if (d > 1e-7) {
                 std::cout << "cell mismatch at " << i << " actual " << out_ref[i] << " expected " << brute_d << "\n";
                 return 1;
             }

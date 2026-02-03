@@ -1,5 +1,5 @@
 // Correctness tests for signed_distance_box
-#include "../edf/edf.hpp"
+#include "edf/edf.hpp"
 #include <cassert>
 #include <cmath>
 #include <iostream>
