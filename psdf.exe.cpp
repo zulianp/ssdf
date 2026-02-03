@@ -253,6 +253,10 @@ int main(int argc, char **argv) {
         printf("Running pedf with %ld points and %ld surface elements\n", npoints_global, surf_nselements);
     }
 
+    int SSDF_USE_EDF_UPDATE = 0;
+    SSDF_READ_ENV(SSDF_USE_EDF_UPDATE, std::stoi);
+    isupdate = SSDF_USE_EDF_UPDATE && isupdate;
+
     int SSDF_DOUBLE_PRECISION = 0;
     SSDF_READ_ENV(SSDF_DOUBLE_PRECISION, std::stoi);
     if (SSDF_DOUBLE_PRECISION == 1 && !std::is_same<T, double>::value) {
