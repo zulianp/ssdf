@@ -45,7 +45,7 @@ namespace ssdf {
         inline void print() const { std::cout << name << " took " << duration << " ms" << std::endl; }
     };
 
-#define SSDF_TIMER(name) Timer t_##name(#name);
+#define SSDF_TIMER(name) ssdf::Timer t_##name(#name);
     // #define SSDF_TIMER(...)
 
     // Compute squared distance from point p to triangle (a, b, c)

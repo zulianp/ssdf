@@ -113,10 +113,10 @@ namespace ssdf {
             boxes[i] = triangles[i].bounds();
         }
 
-        bvh_t trianglesBVH;
-        cuBQL::cpuBuilder(trianglesBVH, boxes.data(), boxes.size(), cuBQL::BuildConfig());
+        bvh_t bvh;
+        cuBQL::cpuBuilder(bvh, boxes.data(), boxes.size(), cuBQL::BuildConfig());
 
-        auto runQueries = [&](bvh_t trianglesBVH,
+        auto runQueries = [&](bvh_t bvh,
                               const Triangle *triangles,
                               int numQueries,
                               const G *const SSDF_RESTRICT x,
@@ -132,7 +132,7 @@ namespace ssdf {
                 vec3f queryPoint(x[tid], y[tid], z[tid]);
                 cuBQL::triangles::CPAT cpat;
                 cpat.sqrDist = outd[tid] * outd[tid];
-                cpat.runQuery(triangles, trianglesBVH, queryPoint);
+                cpat.runQuery(triangles, bvh, queryPoint);
                 const T dist = sqrt(cpat.sqrDist);
                 if (outd[tid] > dist) {
                     outd[tid] = dist;
@@ -144,7 +144,7 @@ namespace ssdf {
             }
         };
 
-        runQueries(trianglesBVH, triangles.data(), npoints, x, y, z, outd, outx, outy, outz, outtri);
+        runQueries(bvh, triangles.data(), npoints, x, y, z, outd, outx, outy, outz, outtri);
         return 0;
     }
 
@@ -203,10 +203,10 @@ namespace ssdf {
             boxes[i] = triangles[i].bounds();
         }
 
-        bvh_t trianglesBVH;
-        cuBQL::cpuBuilder(trianglesBVH, boxes.data(), boxes.size(), cuBQL::BuildConfig());
+        bvh_t bvh;
+        cuBQL::cpuBuilder(bvh, boxes.data(), boxes.size(), cuBQL::BuildConfig());
 
-        auto runQueries = [&](bvh_t trianglesBVH,
+        auto runQueries = [&](bvh_t bvh,
                               const Triangle *triangles,
                               int numQueries,
                               const G *const SSDF_RESTRICT x,
@@ -218,12 +218,12 @@ namespace ssdf {
                 vec3f queryPoint(x[tid], y[tid], z[tid]);
                 cuBQL::triangles::CPAT cpat;
                 cpat.sqrDist = out[tid] * out[tid];
-                cpat.runQuery(triangles, trianglesBVH, queryPoint);
+                cpat.runQuery(triangles, bvh, queryPoint);
                 out[tid] = MIN(out[tid], sqrt(cpat.sqrDist));
             }
         };
 
-        runQueries(trianglesBVH, triangles.data(), npoints, x, y, z, out);
+        runQueries(bvh, triangles.data(), npoints, x, y, z, out);
         return 0;
     }
 
@@ -293,10 +293,10 @@ namespace ssdf {
             boxes[i] = tri.bounds();
         }
 
-        bvh_t trianglesBVH;
-        cuBQL::cpuBuilder(trianglesBVH, boxes.data(), boxes.size(), cuBQL::BuildConfig());
+        bvh_t bvh;
+        cuBQL::cpuBuilder(bvh, boxes.data(), boxes.size(), cuBQL::BuildConfig());
 
-        auto getTriangle = [s0, s1, s2, sx, sy, sz](uint32_t primID) {
+        auto get_triangle = [s0, s1, s2, sx, sy, sz](uint32_t primID) {
             return Triangle(vec3f(sx[s0[primID]], sy[s0[primID]], sz[s0[primID]]),
                             vec3f(sx[s1[primID]], sy[s1[primID]], sz[s1[primID]]),
                             vec3f(sx[s2[primID]], sy[s2[primID]], sz[s2[primID]]));
@@ -305,7 +305,7 @@ namespace ssdf {
 #pragma omp parallel for
         for (int tid = 0; tid < npoints; tid++) {
             vec3f queryPoint(x[tid], y[tid], z[tid]);
-            bool inside = cuBQL::triangles::pointIsInsideSurface(trianglesBVH, getTriangle, queryPoint);
+            bool inside = cuBQL::triangles::pointIsInsideSurface(bvh, get_triangle, queryPoint);
             out[tid] = inside;
         }
 
