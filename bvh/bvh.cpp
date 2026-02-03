@@ -130,7 +130,7 @@ namespace ssdf {
             for (int tid = 0; tid < numQueries; tid++) {
                 vec3f queryPoint(x[tid], y[tid], z[tid]);
                 cuBQL::triangles::CPAT cpat;
-                cpat.sqrDist = outd[tid];
+                cpat.sqrDist = outd[tid]*outd[tid];
                 cpat.runQuery(triangles, trianglesBVH, queryPoint);
                 const T dist = sqrt(cpat.sqrDist);
                 if (outd[tid] > dist) {
@@ -216,7 +216,7 @@ namespace ssdf {
             for (int tid = 0; tid < numQueries; tid++) {
                 vec3f queryPoint(x[tid], y[tid], z[tid]);
                 cuBQL::triangles::CPAT cpat;
-                cpat.sqrDist = out[tid];
+                cpat.sqrDist = out[tid]*out[tid];
                 cpat.runQuery(triangles, trianglesBVH, queryPoint);
                 out[tid] = MIN(out[tid], sqrt(cpat.sqrDist));
             }
