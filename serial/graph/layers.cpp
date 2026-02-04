@@ -106,8 +106,7 @@ namespace ssdf {
                I *SSDF_RESTRICT *const SSDF_RESTRICT elements,
                const ptrdiff_t npoints,
                uint8_t *const SSDF_RESTRICT layers,
-               const int max_layers)
-    {
+               const int max_layers) {
         ptrdiff_t *n2eptr = nullptr;
         I *elindex = nullptr;
         create_n2e<I, ptrdiff_t, I>(nelements, npoints, nxe, elements, &n2eptr, &elindex);
@@ -146,19 +145,19 @@ namespace ssdf {
     template int create_n2e<int, ptrdiff_t, int>(const ptrdiff_t nelements,
                                                  const ptrdiff_t nnodes,
                                                  const int nnodesxelem,
-                                                 int *SSDF_RESTRICT*const SSDF_RESTRICT elems,
+                                                 int *SSDF_RESTRICT *const SSDF_RESTRICT elems,
                                                  ptrdiff_t **out_n2eptr,
                                                  int **out_elindex);
 
     template int layers<int>(const ptrdiff_t nelements,
                              const int nxe,
-                             int *SSDF_RESTRICT*const SSDF_RESTRICT elems,
+                             int *SSDF_RESTRICT *const SSDF_RESTRICT elems,
                              const ptrdiff_t npoints,
                              uint8_t *const SSDF_RESTRICT layers,
                              const int max_layers);
 
     template int layers_iterative<int>(const int nxe,
-                                       int *SSDF_RESTRICT*const SSDF_RESTRICT elements,
+                                       int *SSDF_RESTRICT *const SSDF_RESTRICT elements,
                                        uint8_t *const SSDF_RESTRICT layers,
                                        const int max_layers,
                                        ptrdiff_t *const SSDF_RESTRICT n2eptr,

@@ -27,7 +27,7 @@ namespace ssdf {
     int create_n2e(const ptrdiff_t nelements,
                    const ptrdiff_t nnodes,
                    const int nnodesxelem,
-                   I **const elems,
+                   I *SSDF_RESTRICT *const SSDF_RESTRICT elems,
                    COUNT **out_n2eptr,
                    ELINDEX **out_elindex);
 
