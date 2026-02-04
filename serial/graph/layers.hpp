@@ -18,7 +18,7 @@ namespace ssdf {
     template <typename I>
     int layers(const ptrdiff_t nelements,
                const int nxe,
-               I **const SSDF_RESTRICT elements,
+               I *SSDF_RESTRICT *const SSDF_RESTRICT elements,
                const ptrdiff_t npoints,
                uint8_t *const SSDF_RESTRICT layers,
                const int max_layers = 255);
@@ -33,7 +33,7 @@ namespace ssdf {
 
     template <typename I>
     int layers_iterative(const int nxe,
-                         I **const SSDF_RESTRICT elements,
+                         I *SSDF_RESTRICT *const SSDF_RESTRICT elements,
                          uint8_t *const SSDF_RESTRICT layers,
                          const int max_layers,
                          //  Auxiliary arrays

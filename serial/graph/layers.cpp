@@ -8,7 +8,7 @@ namespace ssdf {
     int create_n2e(const ptrdiff_t nelements,
                    const ptrdiff_t nnodes,
                    const int nnodesxelem,
-                   I **const elems,
+                   I *SSDF_RESTRICT *const SSDF_RESTRICT elems,
                    COUNT **out_n2eptr,
                    ELINDEX **out_elindex) {
         COUNT *n2eptr = (COUNT *)malloc((nnodes + 1) * sizeof(COUNT));
@@ -50,7 +50,7 @@ namespace ssdf {
 
     template <typename I>
     int layers_iterative(const int nxe,
-                         I **const SSDF_RESTRICT elements,
+                         I *SSDF_RESTRICT *const SSDF_RESTRICT elements,
                          uint8_t *const SSDF_RESTRICT layers,
                          const int max_layers,
                          //  Auxiliary arrays
@@ -103,7 +103,7 @@ namespace ssdf {
     template <typename I>
     int layers(const ptrdiff_t nelements,
                const int nxe,
-               I **const SSDF_RESTRICT elements,
+               I *SSDF_RESTRICT *const SSDF_RESTRICT elements,
                const ptrdiff_t npoints,
                uint8_t *const SSDF_RESTRICT layers,
                const int max_layers)
@@ -146,19 +146,19 @@ namespace ssdf {
     template int create_n2e<int, ptrdiff_t, int>(const ptrdiff_t nelements,
                                                  const ptrdiff_t nnodes,
                                                  const int nnodesxelem,
-                                                 int **const elems,
+                                                 int *SSDF_RESTRICT*const SSDF_RESTRICT elems,
                                                  ptrdiff_t **out_n2eptr,
                                                  int **out_elindex);
 
     template int layers<int>(const ptrdiff_t nelements,
                              const int nxe,
-                             int **const elems,
+                             int *SSDF_RESTRICT*const SSDF_RESTRICT elems,
                              const ptrdiff_t npoints,
                              uint8_t *const SSDF_RESTRICT layers,
                              const int max_layers);
 
     template int layers_iterative<int>(const int nxe,
-                                       int **const SSDF_RESTRICT elements,
+                                       int *SSDF_RESTRICT*const SSDF_RESTRICT elements,
                                        uint8_t *const SSDF_RESTRICT layers,
                                        const int max_layers,
                                        ptrdiff_t *const SSDF_RESTRICT n2eptr,
