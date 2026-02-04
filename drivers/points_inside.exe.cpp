@@ -6,6 +6,8 @@
 
 #include "ssdf.hpp"
 
+#ifdef SSDF_ENABLE_CUBIQL
+
 // Helper function to get file size in bytes
 static long get_file_size(FILE *f) {
     fseek(f, 0, SEEK_END);
@@ -294,3 +296,11 @@ int main(int argc, char *argv[]) {
     return 0;
 }
 
+#else
+
+int main(int argc, char *argv[]) {
+    fprintf(stderr, "Error: SSDF_ENABLE_CUBIQL is not enabled\n");
+    return 1;
+}
+
+#endif
