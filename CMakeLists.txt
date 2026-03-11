@@ -1,8 +1,11 @@
 cmake_minimum_required(VERSION 3.15)
 project(ssdf VERSION 0.1.0 LANGUAGES CXX)
 
+# TODO: fix this cmake to be high-quality
+
 # Standard install dirs (bin, lib, include, ...)
 include(GNUInstallDirs)
+include(cmake/SSDFDependencies.cmake)
 
 # Set C++ standard
 set(CMAKE_CXX_STANDARD 17)
@@ -135,6 +138,8 @@ if(SSDF_ENABLE_CUBIQL)
     target_link_libraries(ssdf PRIVATE cuBQL)
 endif()
 
+target_link_libraries(ssdf PUBLIC smesh::smesh)
+
 # Public include dirs:
 # - build interface: serial headers + generated ssdf_config.hpp
 # - install interface: allow both <ssdf_config.hpp> and "ssdf.hpp" (from include/ssdf)
@@ -151,11 +156,18 @@ target_include_directories(ssdf
 # ------------------------------------------------------------------------------
 
 file(GLOB SSDF_DRIVER_SOURCES CONFIGURE_DEPENDS "${PROJECT_SOURCE_DIR}/drivers/*.exe.cpp")
+file(GLOB SSDF_DEMO_SOURCES CONFIGURE_DEPENDS "${PROJECT_SOURCE_DIR}/demo/*.exe.cpp")
+
+list(APPEND SSDF_DRIVER_SOURCES ${SSDF_DEMO_SOURCES})
+
+# message(STATUS "SSDF_DRIVER_SOURCES: ${SSDF_DRIVER_SOURCES}")
+
 set(SSDF_DRIVER_TARGETS "")
 
 foreach(driver_src IN LISTS SSDF_DRIVER_SOURCES)
     get_filename_component(_name_we "${driver_src}" NAME_WE) # e.g. sdf.exe
     string(REGEX REPLACE "\\.exe$" "" driver_name "${_name_we}")
+
 
     if(driver_name STREQUAL "psdf" AND NOT SSDF_ENABLE_MPI)
         continue()

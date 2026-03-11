@@ -1,3 +1,5 @@
+#include <algorithm>
+#include <cstddef>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -213,4 +215,3 @@ int main(int argc, char **argv) {
 
     return write_u8_file(output_labels_file, npoints, layers.data());
 }
-
