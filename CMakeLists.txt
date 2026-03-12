@@ -13,8 +13,6 @@ endif()
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
-option(SSDF_WARNINGS_AS_ERRORS "Treat compiler warnings as errors" OFF)
-
 function(ssdf_enable_strict_warnings target_name)
     if(MSVC)
         target_compile_options(${target_name} PRIVATE /W4 /permissive-)
@@ -36,6 +34,7 @@ include(cmake/SSDFDependencies.cmake)
 
 set(SSDF_BUILD_INCLUDES "")
 list(APPEND SSDF_BUILD_INCLUDES
+    $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}>
     $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/serial>
     $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
@@ -91,6 +90,12 @@ endfunction()
 function(ssdf_configure_binary target_name)
     target_link_libraries(${target_name} PRIVATE ssdf)
     ssdf_enable_strict_warnings(${target_name})
+    if(SSDF_BINARY_PRIVATE_COMPILE_OPTIONS)
+        target_compile_options(${target_name} PRIVATE ${SSDF_BINARY_PRIVATE_COMPILE_OPTIONS})
+    endif()
+    if(SSDF_BINARY_PRIVATE_LINK_OPTIONS)
+        target_link_options(${target_name} PRIVATE ${SSDF_BINARY_PRIVATE_LINK_OPTIONS})
+    endif()
 
     if(target_name STREQUAL "psdf")
         if(SSDF_PSDF_PRIVATE_LIBRARIES)
@@ -147,6 +152,12 @@ if(SSDF_PUBLIC_DEP_LIBRARIES)
 endif()
 if(SSDF_PRIVATE_DEP_LIBRARIES)
     target_link_libraries(ssdf PRIVATE ${SSDF_PRIVATE_DEP_LIBRARIES})
+endif()
+if(SSDF_PRIVATE_COMPILE_OPTIONS)
+    target_compile_options(ssdf PRIVATE ${SSDF_PRIVATE_COMPILE_OPTIONS})
+endif()
+if(SSDF_PRIVATE_LINK_OPTIONS)
+    target_link_options(ssdf PRIVATE ${SSDF_PRIVATE_LINK_OPTIONS})
 endif()
 
 # Public include dirs:
