@@ -171,8 +171,17 @@ target_include_directories(ssdf PUBLIC ${SSDF_BUILD_INCLUDES})
 
 set(SSDF_APP_DIRS
     "drivers"
-    "demo"
 )
+
+if(SSDF_ENABLE_SMESH)
+    list(APPEND SSDF_APP_DIRS "demo")
+endif()
+
+if(SSDF_ENABLE_MPI)
+    list(APPEND SSDF_APP_DIRS
+        "drivers/distributed"
+    )
+endif()
 
 ssdf_glob_files(
     SSDF_APP_SOURCES

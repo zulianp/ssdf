@@ -119,7 +119,7 @@ int main(int argc, char **argv) {
                 n_changes = comm->sum(n_changes);
                 if (!n_changes) {
                     if (!comm->rank()) {
-                        printf("Finished at iteration %i\n", i);
+                        printf("Finished at iteration %i\n", i+1);
                     }
                     break;
                 }
