@@ -1,10 +1,11 @@
 #ifndef EDF_HPP
 #define EDF_HPP
 
+#include <stddef.h>
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
-#include <stddef.h>
+#include <limits>
 
 #ifndef SSDF_READ_ENV
 #define SSDF_READ_ENV(name, conversion) \
@@ -63,6 +64,128 @@ namespace ssdf {
         const T dy = (py < miny) ? (miny - py) : (py > maxy ? py - maxy : T(0));
         const T dz = (pz < minz) ? (minz - pz) : (pz > maxz ? pz - maxz : T(0));
         return dx * dx + dy * dy + dz * dz;
+    }
+
+    // 5.1.9 Closest Points of Two Line Segments. Real-Time Collision Detection by Christer Ericson.
+    template <typename T>
+    inline static void edge_to_edge_closest_points(
+        //    First edge
+        const T ap1x,
+        const T ap1y,
+        const T ap1z,
+        const T ap2x,
+        const T ap2y,
+        const T ap2z,
+        //    Second edge
+        const T bp1x,
+        const T bp1y,
+        const T bp1z,
+        const T bp2x,
+        const T bp2y,
+        const T bp2z,
+        // Output line parameters
+        T *const SSDF_RESTRICT s0,
+        T *const SSDF_RESTRICT s1) {
+        const T ux = ap2x - ap1x;
+        const T uy = ap2y - ap1y;
+        const T uz = ap2z - ap1z;
+
+        const T vx = bp2x - bp1x;
+        const T vy = bp2y - bp1y;
+        const T vz = bp2z - bp1z;
+
+        const T wx = ap1x - bp1x;
+        const T wy = ap1y - bp1y;
+        const T wz = ap1z - bp1z;
+
+        const T a = ux * ux + uy * uy + uz * uz;
+        const T b = ux * vx + uy * vy + uz * vz;
+        const T c = vx * vx + vy * vy + vz * vz;
+        const T d = ux * wx + uy * wy + uz * wz;
+        const T e = vx * wx + vy * wy + vz * wz;
+
+        // Treat very short edges as degenerate to avoid unstable divisions.
+        const T eps = std::numeric_limits<T>::epsilon() * T(16);
+
+        if (a <= eps) {
+            // First edge collapses to a point, so only project that point onto edge B.
+            *s0 = T(0);
+            *s1 = (c <= eps) ? T(0) : std::clamp(e / c, T(0), T(1));
+            return;
+        }
+
+        if (c <= eps) {
+            // Second edge collapses to a point, so only project that point onto edge A.
+            *s1 = T(0);
+            *s0 = std::clamp(-d / a, T(0), T(1));
+            return;
+        }
+
+        // Solve the unconstrained closest-point problem on the two supporting lines.
+        const T D = a * c - b * b;
+
+        T sN;
+        T sD = D;
+        T tN;
+        T tD = D;
+
+        if (D <= eps) {
+            // Nearly parallel edges: pin the first parameter and project onto edge B.
+            sN = T(0);
+            sD = T(1);
+            tN = e;
+            tD = c;
+        } else {
+            sN = b * e - c * d;
+            tN = a * e - b * d;
+
+            if (sN <= T(0)) {
+                // Closest point on edge A falls before ap1, clamp to the first endpoint.
+                sN = T(0);
+                tN = e;
+                tD = c;
+            } else if (sN >= sD) {
+                // Closest point on edge A falls after ap2, clamp to the second endpoint.
+                sN = sD;
+                tN = e + b;
+                tD = c;
+            }
+        }
+
+        if (tN <= T(0)) {
+            // Closest point on edge B falls before bp1, reproject the clamped endpoint onto edge A.
+            tN = T(0);
+
+            if (-d <= T(0)) {
+                sN = T(0);
+                sD = T(1);
+            } else if (-d >= a) {
+                sN = T(1);
+                sD = T(1);
+            } else {
+                sN = -d;
+                sD = a;
+            }
+        } else if (tN >= tD) {
+            // Closest point on edge B falls after bp2, reproject the clamped endpoint onto edge A.
+            tN = tD;
+
+            const T bmd = b - d;
+            if (bmd <= T(0)) {
+                sN = T(0);
+                sD = T(1);
+            } else if (bmd >= a) {
+                sN = T(1);
+                sD = T(1);
+            } else {
+                sN = bmd;
+                sD = a;
+            }
+        }
+
+        // Convert the numerator/denominator form to segment-local coordinates in [0, 1].
+        *s0 = (std::abs(sN) <= eps) ? T(0) : (sN / sD);
+        *s1 = (std::abs(tN) <= eps) ? T(0) : (tN / tD);
     }
 
     template <typename T>
