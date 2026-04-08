@@ -79,10 +79,16 @@ endif()
 
 if(SSDF_ENABLE_CUBIQL)
     if(NOT cuBQL_DIR)
-        message(FATAL_ERROR "cuBQL_DIR is not set")
+        set(cuBQL_DIR "${PROJECT_SOURCE_DIR}/external/cubql" CACHE PATH "Path to cuBQL (git submodule: external/cubql)")
+    endif()
+    if(NOT EXISTS "${cuBQL_DIR}/CMakeLists.txt")
+        message(FATAL_ERROR "cuBQL not found at ${cuBQL_DIR}. Clone submodules: git submodule update --init --recursive")
     endif()
     add_subdirectory(${cuBQL_DIR} "${CMAKE_BINARY_DIR}/_deps/cuBQL-build")
-    list(APPEND SSDF_PRIVATE_DEP_LIBRARIES cuBQL)
+    # Only link cuBQL in the build tree so install(EXPORT ssdfTargets) does not
+    # reference a non-exported target. Requires a shared libssdf (or otherwise
+    # self-contained link) so consumers are not missing cuBQL symbols.
+    list(APPEND SSDF_PRIVATE_DEP_LIBRARIES $<BUILD_INTERFACE:cuBQL>)
 endif()
 
 if(SSDF_ENABLE_ASAN)
