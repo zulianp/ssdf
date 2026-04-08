@@ -13,6 +13,8 @@
 #include "distributed/psdf.hpp"
 #endif
 
+#include "bvh/bvh.hpp"
+
 // #error "Not implemented"
 
 int main(int argc, char **argv) {
