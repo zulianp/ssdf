@@ -35,8 +35,6 @@ void smoke_test() {
     assert(outtri[1] == -1);
     assert(outtri[2] == 1);
     assert(outtri[3] == 1);
-
-    std::cout << "closest_within_radius_bvh tests passed\n";
 }
 
 void self_contact_test() {
@@ -50,33 +48,28 @@ void self_contact_test() {
     const I s1[nselements] = {1, 2};
     const I s2[nselements] = {2, 3};
 
-    const ptrdiff_t npoints = 4;
-    const G x[npoints] = {0.0f, 1.0f, 0.0f, 0.2f};
-    const G y[npoints] = {0.0f, 0.0f, 1.0f, 0.2f};
-    const G z[npoints] = {0.0f, 0.0f, 0.0f, 0.0f};
-
     const ptrdiff_t radius_stride = 1;
-    const T radius_squared[npoints] = {1.0f, 1.0f, 1.0f, 1.0f};
+    const T radius_squared[nspoints] = {1.0f, 1.0f, 1.0f, 1.0f};
 
-    I outtri[npoints] = {-2, -2, -2, -2};
-    const int result = ssdf::closest_within_radius_bvh<G, T, I>(npoints,
-                                                                x,
-                                                                y,
-                                                                z,
-                                                                nselements,
-                                                                s0,
-                                                                s1,
-                                                                s2,
-                                                                nspoints,
-                                                                sx,
-                                                                sy,
-                                                                sz,
-                                                                radius_stride,
-                                                                radius_squared,
-                                                                outtri,
-                                                                true);
+    I outtri[nspoints] = {-2, -2, -2, -2};
+    const int err = ssdf::closest_within_radius_bvh<G, T, I>(nspoints,
+                                                             sx,
+                                                             sy,
+                                                             sz,
+                                                             nselements,
+                                                             s0,
+                                                             s1,
+                                                             s2,
+                                                             nspoints,
+                                                             sx,
+                                                             sy,
+                                                             sz,
+                                                             radius_stride,
+                                                             radius_squared,
+                                                             outtri,
+                                                             true);
 
-    assert(result == 0);
+    assert(err == 0);
     assert(outtri[0] == 1);
     assert(outtri[1] == -1);
     assert(outtri[2] == -1);
