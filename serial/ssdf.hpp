@@ -20,8 +20,6 @@
 #include "bvh/bvh.hpp"
 #endif
 
-
-    
 namespace ssdf {
 
     // Return current time in milliseconds
@@ -120,6 +118,196 @@ namespace ssdf {
         const T projz = az + abz * v + acz * w;
         const T dx = px - projx, dy = py - projy, dz = pz - projz;
         return dx * dx + dy * dy + dz * dz;
+    }
+
+    template <typename T>
+    inline static void triangle_area_weighted_normal(const T ax,
+                                                     const T ay,
+                                                     const T az,
+                                                     const T bx,
+                                                     const T by,
+                                                     const T bz,
+                                                     const T cx,
+                                                     const T cy,
+                                                     const T cz,
+                                                     T *const SSDF_RESTRICT outx,
+                                                     T *const SSDF_RESTRICT outy,
+                                                     T *const SSDF_RESTRICT outz) {
+        const T abx = bx - ax, aby = by - ay, abz = bz - az;
+        const T acx = cx - ax, acy = cy - ay, acz = cz - az;
+        outx[0] = aby * acz - abz * acy;
+        outy[0] = abz * acx - abx * acz;
+        outz[0] = abx * acy - aby * acx;
+    }
+
+    template <typename T>
+    inline static void point_triangle_closest_point(const T px,
+                                                    const T py,
+                                                    const T pz,
+                                                    const T ax,
+                                                    const T ay,
+                                                    const T az,
+                                                    const T bx,
+                                                    const T by,
+                                                    const T bz,
+                                                    const T cx,
+                                                    const T cy,
+                                                    const T cz,
+                                                    T *const SSDF_RESTRICT outx,
+                                                    T *const SSDF_RESTRICT outy,
+                                                    T *const SSDF_RESTRICT outz) {
+        // Based on Real-Time Collision Detection (Christer Ericson)
+        const T abx = bx - ax, aby = by - ay, abz = bz - az;
+        const T acx = cx - ax, acy = cy - ay, acz = cz - az;
+        const T apx = px - ax, apy = py - ay, apz = pz - az;
+
+        const T d1 = abx * apx + aby * apy + abz * apz;
+        const T d2 = acx * apx + acy * apy + acz * apz;
+        if (d1 <= T(0) && d2 <= T(0)) {
+            outx[0] = ax;
+            outy[0] = ay;
+            outz[0] = az;
+            return;
+        }
+
+        const T bpx = px - bx, bpy = py - by, bpz = pz - bz;
+        const T d3 = abx * bpx + aby * bpy + abz * bpz;
+        const T d4 = acx * bpx + acy * bpy + acz * bpz;
+        if (d3 >= T(0) && d4 <= d3) {
+            outx[0] = bx;
+            outy[0] = by;
+            outz[0] = bz;
+            return;
+        }
+
+        const T vc = d1 * d4 - d3 * d2;
+        if (vc <= T(0) && d1 >= T(0) && d3 <= T(0)) {
+            const T v = d1 / (d1 - d3);
+            const T projx = ax + v * abx;
+            const T projy = ay + v * aby;
+            const T projz = az + v * abz;
+            outx[0] = projx;
+            outy[0] = projy;
+            outz[0] = projz;
+            return;
+        }
+
+        const T cpx = px - cx, cpy = py - cy, cpz = pz - cz;
+        const T d5 = abx * cpx + aby * cpy + abz * cpz;
+        const T d6 = acx * cpx + acy * cpy + acz * cpz;
+        if (d6 >= T(0) && d5 <= d6) {
+            outx[0] = cx;
+            outy[0] = cy;
+            outz[0] = cz;
+            return;
+        }
+
+        const T vb = d5 * d2 - d1 * d6;
+        if (vb <= T(0) && d2 >= T(0) && d6 <= T(0)) {
+            const T w = d2 / (d2 - d6);
+            const T projx = ax + w * acx;
+            const T projy = ay + w * acy;
+            const T projz = az + w * acz;
+            outx[0] = projx;
+            outy[0] = projy;
+            outz[0] = projz;
+            return;
+        }
+
+        const T va = d3 * d6 - d5 * d4;
+        if (va <= T(0) && (d4 - d3) >= T(0) && (d5 - d6) >= T(0)) {
+            const T w = (d4 - d3) / ((d4 - d3) + (d5 - d6));
+            const T bcx = cx - bx, bcy = cy - by, bcz = cz - bz;
+            const T projx = bx + w * bcx;
+            const T projy = by + w * bcy;
+            const T projz = bz + w * bcz;
+            outx[0] = projx;
+            outy[0] = projy;
+            outz[0] = projz;
+            return;
+        }
+
+        const T denom = T(1) / (va + vb + vc);
+        const T v = vb * denom;
+        const T w = vc * denom;
+        const T projx = ax + abx * v + acx * w;
+        const T projy = ay + aby * v + acy * w;
+        const T projz = az + abz * v + acz * w;
+        outx[0] = projx;
+        outy[0] = projy;
+        outz[0] = projz;
+    }
+
+    template <typename T>
+    inline static void point_triangle_closest_point_param(const T px,
+                                                          const T py,
+                                                          const T pz,
+                                                          const T ax,
+                                                          const T ay,
+                                                          const T az,
+                                                          const T bx,
+                                                          const T by,
+                                                          const T bz,
+                                                          const T cx,
+                                                          const T cy,
+                                                          const T cz,
+                                                          T *t0,
+                                                          T *t1) {
+        const T abx = bx - ax, aby = by - ay, abz = bz - az;
+        const T acx = cx - ax, acy = cy - ay, acz = cz - az;
+        const T apx = px - ax, apy = py - ay, apz = pz - az;
+
+        const T d1 = abx * apx + aby * apy + abz * apz;
+        const T d2 = acx * apx + acy * apy + acz * apz;
+        if (d1 <= T(0) && d2 <= T(0)) {
+            t0[0] = T(0);
+            t1[0] = T(0);
+            return;
+        }
+
+        const T bpx = px - bx, bpy = py - by, bpz = pz - bz;
+        const T d3 = abx * bpx + aby * bpy + abz * bpz;
+        const T d4 = acx * bpx + acy * bpy + acz * bpz;
+        if (d3 >= T(0) && d4 <= d3) {
+            t0[0] = T(1);
+            t1[0] = T(0);
+            return;
+        }
+
+        const T vc = d1 * d4 - d3 * d2;
+        if (vc <= T(0) && d1 >= T(0) && d3 <= T(0)) {
+            t0[0] = d1 / (d1 - d3);
+            t1[0] = T(0);
+            return;
+        }
+
+        const T cpx = px - cx, cpy = py - cy, cpz = pz - cz;
+        const T d5 = abx * cpx + aby * cpy + abz * cpz;
+        const T d6 = acx * cpx + acy * cpy + acz * cpz;
+        if (d6 >= T(0) && d5 <= d6) {
+            t0[0] = T(0);
+            t1[0] = T(1);
+            return;
+        }
+
+        const T vb = d5 * d2 - d1 * d6;
+        if (vb <= T(0) && d2 >= T(0) && d6 <= T(0)) {
+            t0[0] = T(0);
+            t1[0] = d2 / (d2 - d6);
+            return;
+        }
+
+        const T va = d3 * d6 - d5 * d4;
+        if (va <= T(0) && (d4 - d3) >= T(0) && (d5 - d6) >= T(0)) {
+            const T w = (d4 - d3) / ((d4 - d3) + (d5 - d6));
+            t0[0] = T(1) - w;
+            t1[0] = w;
+            return;
+        }
+
+        const T denom = T(1) / (va + vb + vc);
+        t0[0] = vb * denom;
+        t1[0] = vc * denom;
     }
 
     // template <typename T>
@@ -603,7 +791,7 @@ namespace ssdf {
 
         // Count and aggregate cell AABBs
         for (ptrdiff_t i = 0; i < nselements; ++i) {
-            const ptrdiff_t cid = cell_id((tmin_axis0[i] + tmax_axis0[i])/2, (tmin_axis1[i] + tmax_axis1[i])/2);
+            const ptrdiff_t cid = cell_id((tmin_axis0[i] + tmax_axis0[i]) / 2, (tmin_axis1[i] + tmax_axis1[i]) / 2);
             cell_counts[cid] += 1;
             cell_minx[cid] = std::min(cell_minx[cid], tminx[i]);
             cell_maxx[cid] = std::max(cell_maxx[cid], tmaxx[i]);
@@ -620,7 +808,7 @@ namespace ssdf {
         std::vector<I> cell_idx(nselements);
         std::vector<ptrdiff_t> fill_ptr = cell_ptr;
         for (ptrdiff_t i = 0; i < nselements; ++i) {
-            const ptrdiff_t cid = cell_id((tmin_axis0[i] + tmax_axis0[i])/2, (tmin_axis1[i] + tmax_axis1[i])/2);
+            const ptrdiff_t cid = cell_id((tmin_axis0[i] + tmax_axis0[i]) / 2, (tmin_axis1[i] + tmax_axis1[i]) / 2);
             cell_idx[fill_ptr[cid]++] = I(i);
         }
 
@@ -709,13 +897,14 @@ namespace ssdf {
                 }
             };
 
-// // warmup distance
-// #pragma omp parallel for
-//             for (ptrdiff_t p = 0; p < npoints; p++) {
-//                 T sqdist =
-//                     std::sqrt(point_aabb_distance_squared(x[p], y[p], z[p], gminx, gmaxx, gminy, gmaxy, gminz, gmaxz));
-//                 out[p] = MIN(out[p], sqdist);
-//             }
+            // // warmup distance
+            // #pragma omp parallel for
+            //             for (ptrdiff_t p = 0; p < npoints; p++) {
+            //                 T sqdist =
+            //                     std::sqrt(point_aabb_distance_squared(x[p], y[p], z[p], gminx, gmaxx, gminy, gmaxy,
+            //                     gminz, gmaxz));
+            //                 out[p] = MIN(out[p], sqdist);
+            //             }
 
             const G *const xyz[3] = {x, y, z};
 
@@ -731,7 +920,8 @@ namespace ssdf {
                 // 3) Check sourrounding cells outword ring by ring
                 // Make sure that the loop ends when no improvements are possible
 
-                const ptrdiff_t first_cid = cell_id((xyz[axis0][p] + xyz[axis0][p])/2, (xyz[axis1][p] + xyz[axis1][p])/2);
+                const ptrdiff_t first_cid =
+                    cell_id((xyz[axis0][p] + xyz[axis0][p]) / 2, (xyz[axis1][p] + xyz[axis1][p]) / 2);
                 if (cell_counts[first_cid] != 0 && aabb_can_improve<T>(px,
                                                                        py,
                                                                        pz,
