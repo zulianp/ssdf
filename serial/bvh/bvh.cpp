@@ -329,6 +329,10 @@ namespace ssdf {
                                   const ptrdiff_t radius_stride,
                                   const T *const SSDF_RESTRICT radius_squared,
                                   I *const SSDF_RESTRICT outtri,
+                                  T *const SSDF_RESTRICT out_sqr_dist,
+                                  T *const SSDF_RESTRICT closest_x,
+                                  T *const SSDF_RESTRICT closest_y,
+                                  T *const SSDF_RESTRICT closest_z,
                                   const bool skip_self) {
         using cuBQL::box3f;
         using cuBQL::bvh3f;
@@ -358,9 +362,18 @@ namespace ssdf {
             vec3f query_center(x[pid], y[pid], z[pid]);
             float closest_sq_dist = radius_squared[pid * radius_stride];
             uint32_t closest_tid = -1;
+            vec3f closest_point(0.0f, 0.0f, 0.0f);
 
-            auto perPrim = [pid, s0, s1, s2, &closest_tid, &closest_sq_dist, get_triangle, query_center, skip_self](
-                               uint32_t tid) {
+            auto perPrim = [pid,
+                            s0,
+                            s1,
+                            s2,
+                            &closest_tid,
+                            &closest_sq_dist,
+                            &closest_point,
+                            get_triangle,
+                            query_center,
+                            skip_self](uint32_t tid) {
                 if (skip_self) {
                     // To be used in NTS self contact detection
                     if (pid == s0[tid] || pid == s1[tid] || pid == s2[tid]) {
@@ -368,11 +381,13 @@ namespace ssdf {
                     }
                 }
 
-                auto sqrDist = cuBQL::triangles::computeClosestPoint(query_center, get_triangle(tid), false).sqrDist;
+                auto closest = cuBQL::triangles::computeClosestPoint(query_center, get_triangle(tid), false);
+                auto sqrDist = closest.sqrDist;
 
                 if (sqrDist != CUBQL_INF && sqrDist <= closest_sq_dist) {
                     closest_tid = tid;
                     closest_sq_dist = sqrDist;
+                    closest_point = closest.P;
                 }
 
                 return CUBQL_CONTINUE_TRAVERSAL;
@@ -386,8 +401,143 @@ namespace ssdf {
                                                  false);
 
             outtri[pid] = closest_tid;
+            out_sqr_dist[pid] = (T)closest_sq_dist;
+            closest_x[pid] = closest_point.x;
+            closest_y[pid] = closest_point.y;
+            closest_z[pid] = closest_point.z;
         }
 
+        return 0;
+    }
+
+    template <typename G, typename T, typename I, typename F>
+    int potential_contact_faces_bvh(const ptrdiff_t nselements,
+                                    const I *const SSDF_RESTRICT s0,
+                                    const I *const SSDF_RESTRICT s1,
+                                    const I *const SSDF_RESTRICT s2,
+                                    const ptrdiff_t nspoints,
+                                    const G *const SSDF_RESTRICT sx,
+                                    const G *const SSDF_RESTRICT sy,
+                                    const G *const SSDF_RESTRICT sz,
+                                    const T extrusion,
+                                    ptrdiff_t *const SSDF_RESTRICT pc_ptr,
+                                    F **const SSDF_RESTRICT out_pc_idx) {
+        using cuBQL::box3f;
+        using cuBQL::bvh3f;
+        using cuBQL::Triangle;
+        using cuBQL::vec3f;
+        using bvh_t = bvh3f;
+
+        const int nxe = 3;
+        I *elements[3] = {s0, s1, s2};
+
+        std::vector<box3f> boxes(nselements);
+        for (ptrdiff_t i = 0; i < nselements; i++) {
+            auto tri = Triangle(vec3f(sx[s0[i]], sy[s0[i]], sz[s0[i]]),
+                                vec3f(sx[s1[i]], sy[s1[i]], sz[s1[i]]),
+                                vec3f(sx[s2[i]], sy[s2[i]], sz[s2[i]]));
+            boxes[i] = tri.bounds();
+        }
+
+        bvh_t bvh;
+        cuBQL::cpuBuilder(bvh, boxes.data(), boxes.size(), cuBQL::BuildConfig());
+
+        auto get_triangle = [s0, s1, s2, sx, sy, sz](uint32_t primID) {
+            return Triangle(vec3f(sx[s0[primID]], sy[s0[primID]], sz[s0[primID]]),
+                            vec3f(sx[s1[primID]], sy[s1[primID]], sz[s1[primID]]),
+                            vec3f(sx[s2[primID]], sy[s2[primID]], sz[s2[primID]]));
+        };
+
+        pc_ptr[0] = 0;
+
+#pragma omp parallel for
+        for (int i = 1; i < nselements; i++) {
+            pc_ptr[i] = 0;
+        }
+
+#pragma omp parallel for
+        for (int pid = 0; pid < nselements; pid++) {
+            auto tri = get_triangle(pid);
+            auto normal = tri.normal();
+            auto bounds = tri.bounds();
+
+            bounds = bounds.including(tri.a + normal * extrusion);
+            bounds = bounds.including(tri.b + normal * extrusion);
+            bounds = bounds.including(tri.c + normal * extrusion);
+
+            bounds = bounds.including(tri.a - normal * extrusion);
+            bounds = bounds.including(tri.b - normal * extrusion);
+            bounds = bounds.including(tri.c - normal * extrusion);
+
+            auto perPrim = [pid, nxe, elements, get_triangle, pc_ptr](uint32_t tid) {
+                // Skip connected elements
+                for (int i = 0; i < nxe; i++) {
+                    for (int j = 0; j < nxe; j++) {
+                        if (elements[i][pid] == elements[j][tid]) {
+                            return CUBQL_CONTINUE_TRAVERSAL;
+                        }
+                    }
+                }
+
+                auto other_tri = get_triangle(tid);
+
+                if (bounds.overlaps(other_tri.bounds())) {
+#pragma omp atomic update
+                    pc_ptr[pid + 1]++;
+                }
+
+                return CUBQL_CONTINUE_TRAVERSAL;
+            };
+
+            cuBQL::fixedBoxQuery::forEachPrim(perPrim, bvh, bounds, false);
+        }
+
+        for (int i = 1; i < nselements; i++) {
+            pc_ptr[i] += pc_ptr[i - 1];
+        }
+
+        auto idx = (F *)malloc(pc_ptr[nselements] * sizeof(F));
+        auto bookkeeping = (ptrdiff_t *)calloc(nselements, sizeof(ptrdiff_t));
+
+#pragma omp parallel for
+        for (int pid = 0; pid < nselements; pid++) {
+            auto tri = get_triangle(pid);
+            auto normal = tri.normal();
+            auto bounds = tri.bounds();
+
+            bounds = bounds.including(tri.a + normal * extrusion);
+            bounds = bounds.including(tri.b + normal * extrusion);
+            bounds = bounds.including(tri.c + normal * extrusion);
+
+            auto perPrim = [pid, nxe, elements, get_triangle, pc_ptr, bookkeeping, idx](uint32_t tid) {
+                // Skip connected elements
+                for (int i = 0; i < nxe; i++) {
+                    for (int j = 0; j < nxe; j++) {
+                        if (elements[i][pid] == elements[j][tid]) {
+                            return CUBQL_CONTINUE_TRAVERSAL;
+                        }
+                    }
+                }
+
+                auto other_tri = get_triangle(tid);
+                if (bounds.overlaps(other_tri.bounds())) {
+                    ptrdiff_t bk;
+
+#pragma omp atomic capture
+                    bk = bookkeeping[pid]++;
+
+                    idx[pc_ptr[pid] + bk] = tid;
+                }
+
+                return CUBQL_CONTINUE_TRAVERSAL;
+            };
+
+            cuBQL::fixedBoxQuery::forEachPrim(perPrim, bvh, bounds, false);
+        }
+
+        *out_pc_idx = idx;
+
+        free(bookkeeping);
         return 0;
     }
 
@@ -516,6 +666,10 @@ namespace ssdf {
                                                                const ptrdiff_t,
                                                                const double *const SSDF_RESTRICT,
                                                                int *const SSDF_RESTRICT,
+                                                               double *const SSDF_RESTRICT,
+                                                               double *const SSDF_RESTRICT,
+                                                               double *const SSDF_RESTRICT,
+                                                               double *const SSDF_RESTRICT,
                                                                const bool);
 
     template int closest_within_radius_bvh<float, float, int>(const ptrdiff_t,
@@ -533,6 +687,10 @@ namespace ssdf {
                                                               const ptrdiff_t,
                                                               const float *const SSDF_RESTRICT,
                                                               int *const SSDF_RESTRICT,
+                                                              float *const SSDF_RESTRICT,
+                                                              float *const SSDF_RESTRICT,
+                                                              float *const SSDF_RESTRICT,
+                                                              float *const SSDF_RESTRICT,
                                                               const bool);
 
     template int closest_within_radius_bvh<double, double, int>(const ptrdiff_t,
@@ -550,5 +708,9 @@ namespace ssdf {
                                                                 const ptrdiff_t,
                                                                 const double *const SSDF_RESTRICT,
                                                                 int *const SSDF_RESTRICT,
+                                                                double *const SSDF_RESTRICT,
+                                                                double *const SSDF_RESTRICT,
+                                                                double *const SSDF_RESTRICT,
+                                                                double *const SSDF_RESTRICT,
                                                                 const bool);
 }  // namespace ssdf

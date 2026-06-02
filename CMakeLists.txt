@@ -216,6 +216,11 @@ ssdf_glob_files(
     DIRECTORIES "tests"
     PATTERNS "*_test.cpp"
 )
+
+if(NOT SSDF_ENABLE_CUBIQL)
+    list(FILTER SSDF_TEST_SOURCES EXCLUDE REGEX "/closest_within_radius_test\\.cpp$")
+endif()
+
 set(SSDF_TEST_TARGETS "")
 
 foreach(test_src IN LISTS SSDF_TEST_SOURCES)

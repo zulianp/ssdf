@@ -27,8 +27,29 @@ void smoke_test() {
     const T radius_squared[npoints] = {0.01f, 0.01f, 0.01f, 10.00f};
 
     I outtri[npoints] = {-2, -2, -2, -2};
-    const int result = ssdf::closest_within_radius_bvh<G, T, I>(
-        npoints, x, y, z, nselements, s0, s1, s2, nspoints, sx, sy, sz, radius_stride, radius_squared, outtri);
+    T out_sqr_dist[npoints] = {-1, -1, -1, -1};
+    T closest_x[npoints] = {0.0f, 0.0f, 0.0f, 0.0f};
+    T closest_y[npoints] = {0.0f, 0.0f, 0.0f, 0.0f};
+    T closest_z[npoints] = {0.0f, 0.0f, 0.0f, 0.0f};
+    const int result = ssdf::closest_within_radius_bvh<G, T, I>(npoints,
+                                                                x,
+                                                                y,
+                                                                z,
+                                                                nselements,
+                                                                s0,
+                                                                s1,
+                                                                s2,
+                                                                nspoints,
+                                                                sx,
+                                                                sy,
+                                                                sz,
+                                                                radius_stride,
+                                                                radius_squared,
+                                                                outtri,
+                                                                out_sqr_dist,
+                                                                closest_x,
+                                                                closest_y,
+                                                                closest_z);
 
     assert(result == 0);
     assert(outtri[0] == 0);
@@ -52,6 +73,10 @@ void self_contact_test() {
     const T radius_squared[nspoints] = {1.0f, 1.0f, 1.0f, 1.0f};
 
     I outtri[nspoints] = {-2, -2, -2, -2};
+    T out_sqr_dist[nspoints] = {-1, -1, -1, -1};
+    T closest_x[nspoints] = {0.0f, 0.0f, 0.0f, 0.0f};
+    T closest_y[nspoints] = {0.0f, 0.0f, 0.0f, 0.0f};
+    T closest_z[nspoints] = {0.0f, 0.0f, 0.0f, 0.0f};
     const int err = ssdf::closest_within_radius_bvh<G, T, I>(nspoints,
                                                              sx,
                                                              sy,
@@ -67,6 +92,10 @@ void self_contact_test() {
                                                              radius_stride,
                                                              radius_squared,
                                                              outtri,
+                                                             out_sqr_dist,
+                                                             closest_x,
+                                                             closest_y,
+                                                             closest_z,
                                                              true);
 
     assert(err == 0);
