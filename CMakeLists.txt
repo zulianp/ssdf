@@ -219,6 +219,8 @@ ssdf_glob_files(
 
 if(NOT SSDF_ENABLE_CUBIQL)
     list(FILTER SSDF_TEST_SOURCES EXCLUDE REGEX "/closest_within_radius_test\\.cpp$")
+    list(FILTER SSDF_TEST_SOURCES EXCLUDE REGEX "/potential_contact_triangles_bvh_test\\.cpp$")
+    list(FILTER SSDF_TEST_SOURCES EXCLUDE REGEX "/potential_contact_quads_bvh_test\\.cpp$")
 endif()
 
 set(SSDF_TEST_TARGETS "")

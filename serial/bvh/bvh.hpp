@@ -99,6 +99,20 @@ namespace ssdf {
                                         const T extrusion,
                                         ptrdiff_t *const SSDF_RESTRICT pc_ptr,
                                         F **const SSDF_RESTRICT out_pc_idx);
+
+    template <typename G, typename T, typename I, typename F>
+    int potential_contact_quads_bvh(const ptrdiff_t nselements,
+                                    const I *const SSDF_RESTRICT s0,
+                                    const I *const SSDF_RESTRICT s1,
+                                    const I *const SSDF_RESTRICT s2,
+                                    const I *const SSDF_RESTRICT s3,
+                                    const ptrdiff_t nspoints,
+                                    const G *const SSDF_RESTRICT sx,
+                                    const G *const SSDF_RESTRICT sy,
+                                    const G *const SSDF_RESTRICT sz,
+                                    const T extrusion,
+                                    ptrdiff_t *const SSDF_RESTRICT pc_ptr,
+                                    F **const SSDF_RESTRICT out_pc_idx);
 }  // namespace ssdf
 
 #endif  // SSDF_BVH_HPP

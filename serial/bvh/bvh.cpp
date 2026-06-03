@@ -422,14 +422,15 @@ namespace ssdf {
                                         const T extrusion,
                                         ptrdiff_t *const SSDF_RESTRICT pc_ptr,
                                         F **const SSDF_RESTRICT out_pc_idx) {
+        (void)nspoints;
+
         using cuBQL::box3f;
         using cuBQL::bvh3f;
         using cuBQL::Triangle;
         using cuBQL::vec3f;
         using bvh_t = bvh3f;
 
-        const int nxe = 3;
-        I *elements[3] = {s0, s1, s2};
+        const I *elements[3] = {s0, s1, s2};
 
         std::vector<box3f> boxes(nselements);
         for (ptrdiff_t i = 0; i < nselements; i++) {
@@ -451,7 +452,7 @@ namespace ssdf {
         pc_ptr[0] = 0;
 
 #pragma omp parallel for
-        for (int i = 1; i < nselements; i++) {
+        for (int i = 1; i <= nselements; i++) {
             pc_ptr[i] = 0;
         }
 
@@ -459,7 +460,7 @@ namespace ssdf {
         for (int pid = 0; pid < nselements; pid++) {
             auto tri = get_triangle(pid);
             auto normal = tri.normal();
-            auto bounds = tri.bounds();
+            auto bounds = boxes[pid];
 
             bounds = bounds.including(tri.a + normal * extrusion);
             bounds = bounds.including(tri.b + normal * extrusion);
@@ -469,22 +470,18 @@ namespace ssdf {
             bounds = bounds.including(tri.b - normal * extrusion);
             bounds = bounds.including(tri.c - normal * extrusion);
 
-            auto perPrim = [pid, nxe, elements, get_triangle, pc_ptr](uint32_t tid) {
+            auto perPrim = [pid, elements, pc_ptr](uint32_t tid) {
                 // Skip connected elements
-                for (int i = 0; i < nxe; i++) {
-                    for (int j = 0; j < nxe; j++) {
+                for (int i = 0; i < 3; i++) {
+                    for (int j = 0; j < 3; j++) {
                         if (elements[i][pid] == elements[j][tid]) {
                             return CUBQL_CONTINUE_TRAVERSAL;
                         }
                     }
                 }
 
-                // auto other_tri = get_triangle(tid);
-
-                // if (bounds.overlaps(other_tri.bounds())) {
 #pragma omp atomic update
                 pc_ptr[pid + 1]++;
-                // }
 
                 return CUBQL_CONTINUE_TRAVERSAL;
             };
@@ -492,7 +489,7 @@ namespace ssdf {
             cuBQL::fixedBoxQuery::forEachPrim(perPrim, bvh, bounds, false);
         }
 
-        for (int i = 1; i < nselements; i++) {
+        for (int i = 1; i <= nselements; i++) {
             pc_ptr[i] += pc_ptr[i - 1];
         }
 
@@ -503,7 +500,7 @@ namespace ssdf {
         for (int pid = 0; pid < nselements; pid++) {
             auto tri = get_triangle(pid);
             auto normal = tri.normal();
-            auto bounds = tri.bounds();
+            auto bounds = boxes[pid];
 
             bounds = bounds.including(tri.a + normal * extrusion);
             bounds = bounds.including(tri.b + normal * extrusion);
@@ -513,25 +510,170 @@ namespace ssdf {
             bounds = bounds.including(tri.b - normal * extrusion);
             bounds = bounds.including(tri.c - normal * extrusion);
 
-            auto perPrim = [pid, nxe, elements, get_triangle, pc_ptr, bookkeeping, idx](uint32_t tid) {
+            auto perPrim = [pid, elements, pc_ptr, bookkeeping, idx](uint32_t tid) {
                 // Skip connected elements
-                for (int i = 0; i < nxe; i++) {
-                    for (int j = 0; j < nxe; j++) {
+                for (int i = 0; i < 3; i++) {
+                    for (int j = 0; j < 3; j++) {
                         if (elements[i][pid] == elements[j][tid]) {
                             return CUBQL_CONTINUE_TRAVERSAL;
                         }
                     }
                 }
 
-                // auto other_tri = get_triangle(tid);
-                // if (bounds.overlaps(other_tri.bounds())) {
                 ptrdiff_t bk;
 
 #pragma omp atomic capture
                 bk = bookkeeping[pid]++;
-
                 idx[pc_ptr[pid] + bk] = tid;
-                // }
+
+                return CUBQL_CONTINUE_TRAVERSAL;
+            };
+
+            cuBQL::fixedBoxQuery::forEachPrim(perPrim, bvh, bounds, false);
+        }
+
+        *out_pc_idx = idx;
+
+        free(bookkeeping);
+        return 0;
+    }
+
+    template <typename G, typename T, typename I, typename F>
+    int potential_contact_quads_bvh(const ptrdiff_t nselements,
+                                    const I *const SSDF_RESTRICT s0,
+                                    const I *const SSDF_RESTRICT s1,
+                                    const I *const SSDF_RESTRICT s2,
+                                    const I *const SSDF_RESTRICT s3,
+                                    const ptrdiff_t nspoints,
+                                    const G *const SSDF_RESTRICT sx,
+                                    const G *const SSDF_RESTRICT sy,
+                                    const G *const SSDF_RESTRICT sz,
+                                    const T extrusion,
+                                    ptrdiff_t *const SSDF_RESTRICT pc_ptr,
+                                    F **const SSDF_RESTRICT out_pc_idx) {
+        (void)nspoints;
+
+        using cuBQL::box3f;
+        using cuBQL::bvh3f;
+        using cuBQL::Triangle;
+        using cuBQL::vec3f;
+        using bvh_t = bvh3f;
+
+        const I *elements[4] = {s0, s1, s2, s3};
+
+        struct Quad {
+            vec3f a;
+            vec3f b;
+            vec3f c;
+            vec3f d;
+        };
+
+        auto get_quad = [s0, s1, s2, s3, sx, sy, sz](const ptrdiff_t i) -> Quad {
+            return Quad{vec3f(sx[s0[i]], sy[s0[i]], sz[s0[i]]),
+                        vec3f(sx[s1[i]], sy[s1[i]], sz[s1[i]]),
+                        vec3f(sx[s2[i]], sy[s2[i]], sz[s2[i]]),
+                        vec3f(sx[s3[i]], sy[s3[i]], sz[s3[i]])};
+        };
+
+        auto quad_box = [](const Quad &quad) -> box3f {
+            return box3f().including(quad.a).including(quad.b).including(quad.c).including(quad.d);
+        };
+
+        auto quad_normal = [](const Quad &quad) -> Quad {
+            const vec3f ab = quad.b - quad.a;
+            const vec3f dc = quad.c - quad.d;
+            const vec3f ad = quad.d - quad.a;
+            const vec3f bc = quad.c - quad.b;
+            return Quad{cuBQL::cross(ab, ad), cuBQL::cross(ab, bc), cuBQL::cross(dc, bc), cuBQL::cross(dc, ad)};
+        };
+
+        std::vector<box3f> boxes(nselements);
+        for (ptrdiff_t i = 0; i < nselements; i++) {
+            boxes[i] = quad_box(get_quad(i));
+        }
+
+        bvh_t bvh;
+        cuBQL::cpuBuilder(bvh, boxes.data(), boxes.size(), cuBQL::BuildConfig());
+        pc_ptr[0] = 0;
+
+#pragma omp parallel for
+        for (int i = 1; i <= nselements; i++) {
+            pc_ptr[i] = 0;
+        }
+
+#pragma omp parallel for
+        for (int pid = 0; pid < nselements; pid++) {
+            auto quad = get_quad(pid);
+            auto normal = quad_normal(quad);
+            auto bounds = boxes[pid];
+
+            bounds = bounds.including(quad.a + normal.a * extrusion);
+            bounds = bounds.including(quad.b + normal.b * extrusion);
+            bounds = bounds.including(quad.c + normal.c * extrusion);
+            bounds = bounds.including(quad.d + normal.d * extrusion);
+
+            bounds = bounds.including(quad.a - normal.a * extrusion);
+            bounds = bounds.including(quad.b - normal.b * extrusion);
+            bounds = bounds.including(quad.c - normal.c * extrusion);
+            bounds = bounds.including(quad.d - normal.d * extrusion);
+
+            auto perPrim = [pid, elements, pc_ptr](uint32_t tid) {
+                // Skip connected elements
+                for (int i = 0; i < 4; i++) {
+                    for (int j = 0; j < 4; j++) {
+                        if (elements[i][pid] == elements[j][tid]) {
+                            return CUBQL_CONTINUE_TRAVERSAL;
+                        }
+                    }
+                }
+
+#pragma omp atomic update
+                pc_ptr[pid + 1]++;
+
+                return CUBQL_CONTINUE_TRAVERSAL;
+            };
+
+            cuBQL::fixedBoxQuery::forEachPrim(perPrim, bvh, bounds, false);
+        }
+
+        for (int i = 1; i <= nselements; i++) {
+            pc_ptr[i] += pc_ptr[i - 1];
+        }
+
+        auto idx = (F *)malloc(pc_ptr[nselements] * sizeof(F));
+        auto bookkeeping = (ptrdiff_t *)calloc(nselements, sizeof(ptrdiff_t));
+
+#pragma omp parallel for
+        for (int pid = 0; pid < nselements; pid++) {
+            auto quad = get_quad(pid);
+            auto normal = quad_normal(quad);
+            auto bounds = boxes[pid];
+
+            bounds = bounds.including(quad.a + normal.a * extrusion);
+            bounds = bounds.including(quad.b + normal.b * extrusion);
+            bounds = bounds.including(quad.c + normal.c * extrusion);
+            bounds = bounds.including(quad.d + normal.d * extrusion);
+
+            bounds = bounds.including(quad.a - normal.a * extrusion);
+            bounds = bounds.including(quad.b - normal.b * extrusion);
+            bounds = bounds.including(quad.c - normal.c * extrusion);
+            bounds = bounds.including(quad.d - normal.d * extrusion);
+
+            auto perPrim = [pid, elements, pc_ptr, bookkeeping, idx](uint32_t tid) {
+                // Skip connected elements
+                for (int i = 0; i < 4; i++) {
+                    for (int j = 0; j < 4; j++) {
+                        if (elements[i][pid] == elements[j][tid]) {
+                            return CUBQL_CONTINUE_TRAVERSAL;
+                        }
+                    }
+                }
+
+                ptrdiff_t bk;
+
+#pragma omp atomic capture
+                bk = bookkeeping[pid]++;
+                idx[pc_ptr[pid] + bk] = tid;
 
                 return CUBQL_CONTINUE_TRAVERSAL;
             };
@@ -717,4 +859,29 @@ namespace ssdf {
                                                                 double *const SSDF_RESTRICT,
                                                                 double *const SSDF_RESTRICT,
                                                                 const bool);
+
+    template int potential_contact_triangles_bvh<float, float, int, int>(const ptrdiff_t,
+                                                                         const int *const SSDF_RESTRICT,
+                                                                         const int *const SSDF_RESTRICT,
+                                                                         const int *const SSDF_RESTRICT,
+                                                                         const ptrdiff_t,
+                                                                         const float *const SSDF_RESTRICT,
+                                                                         const float *const SSDF_RESTRICT,
+                                                                         const float *const SSDF_RESTRICT,
+                                                                         const float,
+                                                                         ptrdiff_t *const SSDF_RESTRICT,
+                                                                         int **const SSDF_RESTRICT);
+
+    template int potential_contact_quads_bvh<float, float, int, int>(const ptrdiff_t,
+                                                                     const int *const SSDF_RESTRICT,
+                                                                     const int *const SSDF_RESTRICT,
+                                                                     const int *const SSDF_RESTRICT,
+                                                                     const int *const SSDF_RESTRICT,
+                                                                     const ptrdiff_t,
+                                                                     const float *const SSDF_RESTRICT,
+                                                                     const float *const SSDF_RESTRICT,
+                                                                     const float *const SSDF_RESTRICT,
+                                                                     const float,
+                                                                     ptrdiff_t *const SSDF_RESTRICT,
+                                                                     int **const SSDF_RESTRICT);
 }  // namespace ssdf
