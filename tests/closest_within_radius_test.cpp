@@ -1,6 +1,7 @@
 #include "bvh/bvh.hpp"
 
 #include <cassert>
+#include <cmath>
 #include <iostream>
 
 using G = float;
@@ -105,8 +106,64 @@ void self_contact_test() {
     assert(outtri[3] == 0);
 }
 
+void quad_smoke_test() {
+    const ptrdiff_t nspoints = 4;
+    const G sx[nspoints] = {0.0f, 1.0f, 1.0f, 0.0f};
+    const G sy[nspoints] = {0.0f, 0.0f, 1.0f, 1.0f};
+    const G sz[nspoints] = {0.0f, 0.0f, 0.0f, 0.0f};
+
+    const ptrdiff_t nselements = 1;
+    const I s0[nselements] = {0};
+    const I s1[nselements] = {1};
+    const I s2[nselements] = {2};
+    const I s3[nselements] = {3};
+
+    const ptrdiff_t npoints = 2;
+    const G x[npoints] = {0.25f, 0.25f};
+    const G y[npoints] = {0.75f, 0.75f};
+    const G z[npoints] = {0.05f, 0.20f};
+
+    const ptrdiff_t radius_stride = 1;
+    const T radius_squared[npoints] = {0.01f, 0.01f};
+
+    I outtri[npoints] = {-2, -2};
+    T out_sqr_dist[npoints] = {-1, -1};
+    T closest_x[npoints] = {0.0f, 0.0f};
+    T closest_y[npoints] = {0.0f, 0.0f};
+    T closest_z[npoints] = {0.0f, 0.0f};
+    const int err = ssdf::closest_within_radius_quads_bvh<G, T, I>(npoints,
+                                                                   x,
+                                                                   y,
+                                                                   z,
+                                                                   nselements,
+                                                                   s0,
+                                                                   s1,
+                                                                   s2,
+                                                                   s3,
+                                                                   nspoints,
+                                                                   sx,
+                                                                   sy,
+                                                                   sz,
+                                                                   radius_stride,
+                                                                   radius_squared,
+                                                                   outtri,
+                                                                   out_sqr_dist,
+                                                                   closest_x,
+                                                                   closest_y,
+                                                                   closest_z);
+
+    assert(err == 0);
+    assert(outtri[0] == 0);
+    assert(std::abs(out_sqr_dist[0] - 0.0025f) < 1e-6f);
+    assert(std::abs(closest_x[0] - 0.25f) < 1e-6f);
+    assert(std::abs(closest_y[0] - 0.75f) < 1e-6f);
+    assert(std::abs(closest_z[0]) < 1e-6f);
+    assert(outtri[1] == -1);
+}
+
 int main() {
     smoke_test();
     self_contact_test();
+    quad_smoke_test();
     return 0;
 }
