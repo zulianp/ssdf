@@ -45,6 +45,36 @@ namespace ssdf {
         w2[0] = w;
     }
 
+    template <typename T>
+    static inline void triangle_local_coordinates_st(const T px,
+                                                     const T py,
+                                                     const T pz,
+                                                     const T ax,
+                                                     const T ay,
+                                                     const T az,
+                                                     const T bx,
+                                                     const T by,
+                                                     const T bz,
+                                                     const T cx,
+                                                     const T cy,
+                                                     const T cz,
+                                                     T *const SSDF_RESTRICT s,
+                                                     T *const SSDF_RESTRICT t) {
+        const T v0x = bx - ax, v0y = by - ay, v0z = bz - az;
+        const T v1x = cx - ax, v1y = cy - ay, v1z = cz - az;
+        const T v2x = px - ax, v2y = py - ay, v2z = pz - az;
+
+        const T d00 = v0x * v0x + v0y * v0y + v0z * v0z;
+        const T d01 = v0x * v1x + v0y * v1y + v0z * v1z;
+        const T d11 = v1x * v1x + v1y * v1y + v1z * v1z;
+        const T d20 = v2x * v0x + v2y * v0y + v2z * v0z;
+        const T d21 = v2x * v1x + v2y * v1y + v2z * v1z;
+
+        const T inv_denom = T(1) / (d00 * d11 - d01 * d01);
+        s[0] = (d11 * d20 - d01 * d21) * inv_denom;
+        t[0] = (d00 * d21 - d01 * d20) * inv_denom;
+    }
+
     template <typename G, typename T, typename I>
     int interpolant_cpu(const ptrdiff_t npoints,
                         const G *const SSDF_RESTRICT x,
@@ -315,6 +345,121 @@ namespace ssdf {
     }
 
     template <typename G, typename T, typename I>
+    int closest_within_radius_local_bvh(const ptrdiff_t npoints,
+                                        const G *const SSDF_RESTRICT x,
+                                        const G *const SSDF_RESTRICT y,
+                                        const G *const SSDF_RESTRICT z,
+                                        const ptrdiff_t nselements,
+                                        const I *const SSDF_RESTRICT s0,
+                                        const I *const SSDF_RESTRICT s1,
+                                        const I *const SSDF_RESTRICT s2,
+                                        const ptrdiff_t nspoints,
+                                        const G *const SSDF_RESTRICT sx,
+                                        const G *const SSDF_RESTRICT sy,
+                                        const G *const SSDF_RESTRICT sz,
+                                        const ptrdiff_t radius_stride,
+                                        const T *const SSDF_RESTRICT radius_squared,
+                                        I *const SSDF_RESTRICT outtri,
+                                        T *const SSDF_RESTRICT out_sqr_dist,
+                                        T *const SSDF_RESTRICT closest_s,
+                                        T *const SSDF_RESTRICT closest_t,
+                                        const bool skip_self) {
+        (void)nspoints;
+
+        using cuBQL::box3f;
+        using cuBQL::bvh3f;
+        using cuBQL::Triangle;
+        using cuBQL::vec3f;
+        using bvh_t = bvh3f;
+
+        std::vector<box3f> boxes(nselements);
+        for (ptrdiff_t i = 0; i < nselements; i++) {
+            auto tri = Triangle(vec3f(sx[s0[i]], sy[s0[i]], sz[s0[i]]),
+                                vec3f(sx[s1[i]], sy[s1[i]], sz[s1[i]]),
+                                vec3f(sx[s2[i]], sy[s2[i]], sz[s2[i]]));
+            boxes[i] = tri.bounds();
+        }
+
+        bvh_t bvh;
+        cuBQL::cpuBuilder(bvh, boxes.data(), boxes.size(), cuBQL::BuildConfig());
+
+        auto get_triangle = [s0, s1, s2, sx, sy, sz](uint32_t primID) {
+            return Triangle(vec3f(sx[s0[primID]], sy[s0[primID]], sz[s0[primID]]),
+                            vec3f(sx[s1[primID]], sy[s1[primID]], sz[s1[primID]]),
+                            vec3f(sx[s2[primID]], sy[s2[primID]], sz[s2[primID]]));
+        };
+
+#pragma omp parallel for
+        for (int pid = 0; pid < npoints; pid++) {
+            vec3f query_center(x[pid], y[pid], z[pid]);
+            float closest_sq_dist = radius_squared[pid * radius_stride];
+            uint32_t closest_tid = uint32_t(-1);
+            vec3f closest_point(0.0f, 0.0f, 0.0f);
+
+            auto perPrim = [pid,
+                            s0,
+                            s1,
+                            s2,
+                            &closest_tid,
+                            &closest_sq_dist,
+                            &closest_point,
+                            get_triangle,
+                            query_center,
+                            skip_self](uint32_t tid) {
+                if (skip_self) {
+                    if (pid == s0[tid] || pid == s1[tid] || pid == s2[tid]) {
+                        return CUBQL_CONTINUE_TRAVERSAL;
+                    }
+                }
+
+                auto closest = cuBQL::triangles::computeClosestPoint(query_center, get_triangle(tid), false);
+                auto sqrDist = closest.sqrDist;
+
+                if (sqrDist != CUBQL_INF && sqrDist <= closest_sq_dist) {
+                    closest_tid = tid;
+                    closest_sq_dist = sqrDist;
+                    closest_point = closest.P;
+                }
+
+                return CUBQL_CONTINUE_TRAVERSAL;
+            };
+
+            cuBQL::fixedRadiusQuery::forEachPrim(perPrim,
+                                                 bvh,
+                                                 query_center,
+                                                 (float)radius_squared[pid * radius_stride],
+                                                 false);
+
+            outtri[pid] = closest_tid == uint32_t(-1) ? I(-1) : I(closest_tid);
+            out_sqr_dist[pid] = (T)closest_sq_dist;
+            if (closest_tid != uint32_t(-1)) {
+                const I i0 = s0[closest_tid];
+                const I i1 = s1[closest_tid];
+                const I i2 = s2[closest_tid];
+                triangle_local_coordinates_st<T>((T)closest_point.x,
+                                                 (T)closest_point.y,
+                                                 (T)closest_point.z,
+                                                 (T)sx[i0],
+                                                 (T)sy[i0],
+                                                 (T)sz[i0],
+                                                 (T)sx[i1],
+                                                 (T)sy[i1],
+                                                 (T)sz[i1],
+                                                 (T)sx[i2],
+                                                 (T)sy[i2],
+                                                 (T)sz[i2],
+                                                 &closest_s[pid],
+                                                 &closest_t[pid]);
+            } else {
+                closest_s[pid] = T(0);
+                closest_t[pid] = T(0);
+            }
+        }
+
+        return 0;
+    }
+
+    template <typename G, typename T, typename I>
     int closest_within_radius_bvh(const ptrdiff_t npoints,
                                   const G *const SSDF_RESTRICT x,
                                   const G *const SSDF_RESTRICT y,
@@ -534,6 +679,135 @@ namespace ssdf {
             closest_x[pid] = closest_point.x;
             closest_y[pid] = closest_point.y;
             closest_z[pid] = closest_point.z;
+        }
+
+        return 0;
+    }
+
+    template <typename G, typename T, typename I>
+    int closest_within_radius_quads_local_bvh(const ptrdiff_t npoints,
+                                              const G *const SSDF_RESTRICT x,
+                                              const G *const SSDF_RESTRICT y,
+                                              const G *const SSDF_RESTRICT z,
+                                              const ptrdiff_t nselements,
+                                              const I *const SSDF_RESTRICT s0,
+                                              const I *const SSDF_RESTRICT s1,
+                                              const I *const SSDF_RESTRICT s2,
+                                              const I *const SSDF_RESTRICT s3,
+                                              const ptrdiff_t nspoints,
+                                              const G *const SSDF_RESTRICT sx,
+                                              const G *const SSDF_RESTRICT sy,
+                                              const G *const SSDF_RESTRICT sz,
+                                              const ptrdiff_t radius_stride,
+                                              const T *const SSDF_RESTRICT radius_squared,
+                                              I *const SSDF_RESTRICT outtri,
+                                              T *const SSDF_RESTRICT out_sqr_dist,
+                                              T *const SSDF_RESTRICT closest_s,
+                                              T *const SSDF_RESTRICT closest_t,
+                                              const bool skip_self) {
+        (void)nspoints;
+
+        using cuBQL::box3f;
+        using cuBQL::bvh3f;
+        using cuBQL::vec3f;
+        using bvh_t = bvh3f;
+
+        struct Quad {
+            vec3f a;
+            vec3f b;
+            vec3f c;
+            vec3f d;
+        };
+
+        auto get_quad = [s0, s1, s2, s3, sx, sy, sz](const ptrdiff_t i) -> Quad {
+            return Quad{vec3f(sx[s0[i]], sy[s0[i]], sz[s0[i]]),
+                        vec3f(sx[s1[i]], sy[s1[i]], sz[s1[i]]),
+                        vec3f(sx[s2[i]], sy[s2[i]], sz[s2[i]]),
+                        vec3f(sx[s3[i]], sy[s3[i]], sz[s3[i]])};
+        };
+
+        std::vector<box3f> boxes(nselements);
+        for (ptrdiff_t i = 0; i < nselements; i++) {
+            const Quad quad = get_quad(i);
+            boxes[i] = box3f().including(quad.a).including(quad.b).including(quad.c).including(quad.d);
+        }
+
+        bvh_t bvh;
+        cuBQL::cpuBuilder(bvh, boxes.data(), boxes.size(), cuBQL::BuildConfig());
+
+#pragma omp parallel for
+        for (int pid = 0; pid < npoints; pid++) {
+            vec3f query_center(x[pid], y[pid], z[pid]);
+            float closest_sq_dist = radius_squared[pid * radius_stride];
+            uint32_t closest_tid = uint32_t(-1);
+            float best_s = 0.0f;
+            float best_t = 0.0f;
+
+            auto perPrim = [pid,
+                            s0,
+                            s1,
+                            s2,
+                            s3,
+                            &closest_tid,
+                            &closest_sq_dist,
+                            &best_s,
+                            &best_t,
+                            get_quad,
+                            query_center,
+                            skip_self](uint32_t tid) {
+                if (skip_self) {
+                    if (pid == s0[tid] || pid == s1[tid] || pid == s2[tid] || pid == s3[tid]) {
+                        return CUBQL_CONTINUE_TRAVERSAL;
+                    }
+                }
+
+                const Quad quad = get_quad(tid);
+                float s, t;
+                point_to_quad_closest_point(query_center.x,
+                                            query_center.y,
+                                            query_center.z,
+                                            quad.a.x,
+                                            quad.a.y,
+                                            quad.a.z,
+                                            quad.b.x,
+                                            quad.b.y,
+                                            quad.b.z,
+                                            quad.c.x,
+                                            quad.c.y,
+                                            quad.c.z,
+                                            quad.d.x,
+                                            quad.d.y,
+                                            quad.d.z,
+                                            &s,
+                                            &t);
+
+                const float one_minus_s = 1.0f - s;
+                const float one_minus_t = 1.0f - t;
+                const vec3f closest(quad.a * (one_minus_s * one_minus_t) + quad.b * (s * one_minus_t) +
+                                    quad.c * (s * t) + quad.d * (one_minus_s * t));
+                const vec3f diff = query_center - closest;
+                const float sqrDist = cuBQL::dot(diff, diff);
+
+                if (sqrDist != CUBQL_INF && sqrDist <= closest_sq_dist) {
+                    closest_tid = tid;
+                    closest_sq_dist = sqrDist;
+                    best_s = s;
+                    best_t = t;
+                }
+
+                return CUBQL_CONTINUE_TRAVERSAL;
+            };
+
+            cuBQL::fixedRadiusQuery::forEachPrim(perPrim,
+                                                 bvh,
+                                                 query_center,
+                                                 (float)radius_squared[pid * radius_stride],
+                                                 false);
+
+            outtri[pid] = closest_tid == uint32_t(-1) ? I(-1) : I(closest_tid);
+            out_sqr_dist[pid] = (T)closest_sq_dist;
+            closest_s[pid] = (T)best_s;
+            closest_t[pid] = (T)best_t;
         }
 
         return 0;
@@ -989,6 +1263,66 @@ namespace ssdf {
                                                                 double *const SSDF_RESTRICT,
                                                                 const bool);
 
+    template int closest_within_radius_local_bvh<float, double, int>(const ptrdiff_t,
+                                                                     const float *const SSDF_RESTRICT,
+                                                                     const float *const SSDF_RESTRICT,
+                                                                     const float *const SSDF_RESTRICT,
+                                                                     const ptrdiff_t,
+                                                                     const int *const SSDF_RESTRICT,
+                                                                     const int *const SSDF_RESTRICT,
+                                                                     const int *const SSDF_RESTRICT,
+                                                                     const ptrdiff_t,
+                                                                     const float *const SSDF_RESTRICT,
+                                                                     const float *const SSDF_RESTRICT,
+                                                                     const float *const SSDF_RESTRICT,
+                                                                     const ptrdiff_t,
+                                                                     const double *const SSDF_RESTRICT,
+                                                                     int *const SSDF_RESTRICT,
+                                                                     double *const SSDF_RESTRICT,
+                                                                     double *const SSDF_RESTRICT,
+                                                                     double *const SSDF_RESTRICT,
+                                                                     const bool);
+
+    template int closest_within_radius_local_bvh<float, float, int>(const ptrdiff_t,
+                                                                    const float *const SSDF_RESTRICT,
+                                                                    const float *const SSDF_RESTRICT,
+                                                                    const float *const SSDF_RESTRICT,
+                                                                    const ptrdiff_t,
+                                                                    const int *const SSDF_RESTRICT,
+                                                                    const int *const SSDF_RESTRICT,
+                                                                    const int *const SSDF_RESTRICT,
+                                                                    const ptrdiff_t,
+                                                                    const float *const SSDF_RESTRICT,
+                                                                    const float *const SSDF_RESTRICT,
+                                                                    const float *const SSDF_RESTRICT,
+                                                                    const ptrdiff_t,
+                                                                    const float *const SSDF_RESTRICT,
+                                                                    int *const SSDF_RESTRICT,
+                                                                    float *const SSDF_RESTRICT,
+                                                                    float *const SSDF_RESTRICT,
+                                                                    float *const SSDF_RESTRICT,
+                                                                    const bool);
+
+    template int closest_within_radius_local_bvh<double, double, int>(const ptrdiff_t,
+                                                                      const double *const SSDF_RESTRICT,
+                                                                      const double *const SSDF_RESTRICT,
+                                                                      const double *const SSDF_RESTRICT,
+                                                                      const ptrdiff_t,
+                                                                      const int *const SSDF_RESTRICT,
+                                                                      const int *const SSDF_RESTRICT,
+                                                                      const int *const SSDF_RESTRICT,
+                                                                      const ptrdiff_t,
+                                                                      const double *const SSDF_RESTRICT,
+                                                                      const double *const SSDF_RESTRICT,
+                                                                      const double *const SSDF_RESTRICT,
+                                                                      const ptrdiff_t,
+                                                                      const double *const SSDF_RESTRICT,
+                                                                      int *const SSDF_RESTRICT,
+                                                                      double *const SSDF_RESTRICT,
+                                                                      double *const SSDF_RESTRICT,
+                                                                      double *const SSDF_RESTRICT,
+                                                                      const bool);
+
     template int closest_within_radius_quads_bvh<float, float, int>(const ptrdiff_t,
                                                                     const float *const SSDF_RESTRICT,
                                                                     const float *const SSDF_RESTRICT,
@@ -1010,6 +1344,27 @@ namespace ssdf {
                                                                     float *const SSDF_RESTRICT,
                                                                     float *const SSDF_RESTRICT,
                                                                     const bool);
+
+    template int closest_within_radius_quads_local_bvh<float, float, int>(const ptrdiff_t,
+                                                                          const float *const SSDF_RESTRICT,
+                                                                          const float *const SSDF_RESTRICT,
+                                                                          const float *const SSDF_RESTRICT,
+                                                                          const ptrdiff_t,
+                                                                          const int *const SSDF_RESTRICT,
+                                                                          const int *const SSDF_RESTRICT,
+                                                                          const int *const SSDF_RESTRICT,
+                                                                          const int *const SSDF_RESTRICT,
+                                                                          const ptrdiff_t,
+                                                                          const float *const SSDF_RESTRICT,
+                                                                          const float *const SSDF_RESTRICT,
+                                                                          const float *const SSDF_RESTRICT,
+                                                                          const ptrdiff_t,
+                                                                          const float *const SSDF_RESTRICT,
+                                                                          int *const SSDF_RESTRICT,
+                                                                          float *const SSDF_RESTRICT,
+                                                                          float *const SSDF_RESTRICT,
+                                                                          float *const SSDF_RESTRICT,
+                                                                          const bool);
 
     template int potential_contact_triangles_bvh<float, float, int, int>(const ptrdiff_t,
                                                                          const int *const SSDF_RESTRICT,
