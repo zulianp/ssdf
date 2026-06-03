@@ -411,17 +411,17 @@ namespace ssdf {
     }
 
     template <typename G, typename T, typename I, typename F>
-    int potential_contact_faces_bvh(const ptrdiff_t nselements,
-                                    const I *const SSDF_RESTRICT s0,
-                                    const I *const SSDF_RESTRICT s1,
-                                    const I *const SSDF_RESTRICT s2,
-                                    const ptrdiff_t nspoints,
-                                    const G *const SSDF_RESTRICT sx,
-                                    const G *const SSDF_RESTRICT sy,
-                                    const G *const SSDF_RESTRICT sz,
-                                    const T extrusion,
-                                    ptrdiff_t *const SSDF_RESTRICT pc_ptr,
-                                    F **const SSDF_RESTRICT out_pc_idx) {
+    int potential_contact_triangles_bvh(const ptrdiff_t nselements,
+                                        const I *const SSDF_RESTRICT s0,
+                                        const I *const SSDF_RESTRICT s1,
+                                        const I *const SSDF_RESTRICT s2,
+                                        const ptrdiff_t nspoints,
+                                        const G *const SSDF_RESTRICT sx,
+                                        const G *const SSDF_RESTRICT sy,
+                                        const G *const SSDF_RESTRICT sz,
+                                        const T extrusion,
+                                        ptrdiff_t *const SSDF_RESTRICT pc_ptr,
+                                        F **const SSDF_RESTRICT out_pc_idx) {
         using cuBQL::box3f;
         using cuBQL::bvh3f;
         using cuBQL::Triangle;
@@ -479,12 +479,12 @@ namespace ssdf {
                     }
                 }
 
-                auto other_tri = get_triangle(tid);
+                // auto other_tri = get_triangle(tid);
 
-                if (bounds.overlaps(other_tri.bounds())) {
+                // if (bounds.overlaps(other_tri.bounds())) {
 #pragma omp atomic update
-                    pc_ptr[pid + 1]++;
-                }
+                pc_ptr[pid + 1]++;
+                // }
 
                 return CUBQL_CONTINUE_TRAVERSAL;
             };
@@ -509,6 +509,10 @@ namespace ssdf {
             bounds = bounds.including(tri.b + normal * extrusion);
             bounds = bounds.including(tri.c + normal * extrusion);
 
+            bounds = bounds.including(tri.a - normal * extrusion);
+            bounds = bounds.including(tri.b - normal * extrusion);
+            bounds = bounds.including(tri.c - normal * extrusion);
+
             auto perPrim = [pid, nxe, elements, get_triangle, pc_ptr, bookkeeping, idx](uint32_t tid) {
                 // Skip connected elements
                 for (int i = 0; i < nxe; i++) {
@@ -519,15 +523,15 @@ namespace ssdf {
                     }
                 }
 
-                auto other_tri = get_triangle(tid);
-                if (bounds.overlaps(other_tri.bounds())) {
-                    ptrdiff_t bk;
+                // auto other_tri = get_triangle(tid);
+                // if (bounds.overlaps(other_tri.bounds())) {
+                ptrdiff_t bk;
 
 #pragma omp atomic capture
-                    bk = bookkeeping[pid]++;
+                bk = bookkeeping[pid]++;
 
-                    idx[pc_ptr[pid] + bk] = tid;
-                }
+                idx[pc_ptr[pid] + bk] = tid;
+                // }
 
                 return CUBQL_CONTINUE_TRAVERSAL;
             };
