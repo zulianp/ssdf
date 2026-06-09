@@ -7,6 +7,11 @@
 
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 
+// #define VIZ_DEBUG
+#ifdef VIZ_DEBUG
+#include "/Users/patrickzulian/Desktop/code/sviz/src/sviz_monitor_client.hpp"
+#endif
+
 namespace ssdf {
 
     template <typename T>
@@ -424,11 +429,8 @@ namespace ssdf {
                 return CUBQL_CONTINUE_TRAVERSAL;
             };
 
-            cuBQL::fixedRadiusQuery::forEachPrim(perPrim,
-                                                 bvh,
-                                                 query_center,
-                                                 (float)radius_squared[pid * radius_stride],
-                                                 false);
+            cuBQL::fixedRadiusQuery::forEachPrim(
+                perPrim, bvh, query_center, (float)radius_squared[pid * radius_stride], false);
 
             outtri[pid] = closest_tid == uint32_t(-1) ? I(-1) : I(closest_tid);
             out_sqr_dist[pid] = (T)closest_sq_dist;
@@ -798,11 +800,8 @@ namespace ssdf {
                 return CUBQL_CONTINUE_TRAVERSAL;
             };
 
-            cuBQL::fixedRadiusQuery::forEachPrim(perPrim,
-                                                 bvh,
-                                                 query_center,
-                                                 (float)radius_squared[pid * radius_stride],
-                                                 false);
+            cuBQL::fixedRadiusQuery::forEachPrim(
+                perPrim, bvh, query_center, (float)radius_squared[pid * radius_stride], false);
 
             outtri[pid] = closest_tid == uint32_t(-1) ? I(-1) : I(closest_tid);
             out_sqr_dist[pid] = (T)closest_sq_dist;
@@ -859,19 +858,33 @@ namespace ssdf {
             pc_ptr[i] = 0;
         }
 
+#ifdef VIZ_DEBUG
+        sviz::Message msg("bvh-boxes");
+#endif
+
+        const T inner_scale = 0.1;
 #pragma omp parallel for
         for (int pid = 0; pid < nselements; pid++) {
             auto tri = get_triangle(pid);
             auto normal = tri.normal();
             auto bounds = boxes[pid];
 
-            bounds = bounds.including(tri.a + normal * extrusion);
-            bounds = bounds.including(tri.b + normal * extrusion);
-            bounds = bounds.including(tri.c + normal * extrusion);
+            bounds = bounds.including(tri.a + normal * static_cast<float>(extrusion));
+            bounds = bounds.including(tri.b + normal * static_cast<float>(extrusion));
+            bounds = bounds.including(tri.c + normal * static_cast<float>(extrusion));
 
-            bounds = bounds.including(tri.a - normal * extrusion);
-            bounds = bounds.including(tri.b - normal * extrusion);
-            bounds = bounds.including(tri.c - normal * extrusion);
+            bounds = bounds.including(tri.a - normal * static_cast<float>(inner_scale * extrusion));
+            bounds = bounds.including(tri.b - normal * static_cast<float>(inner_scale * extrusion));
+            bounds = bounds.including(tri.c - normal * static_cast<float>(inner_scale * extrusion));
+
+#ifdef VIZ_DEBUG
+            msg.aabb_soa(sviz::view(&bounds.lower.x, 1),
+                         sviz::view(&bounds.lower.y, 1),
+                         sviz::view(&bounds.lower.z, 1),
+                         sviz::view(&bounds.upper.x, 1),
+                         sviz::view(&bounds.upper.y, 1),
+                         sviz::view(&bounds.upper.z, 1));
+#endif
 
             auto perPrim = [pid, elements, pc_ptr](uint32_t tid) {
                 // Skip connected elements
@@ -892,6 +905,10 @@ namespace ssdf {
             cuBQL::fixedBoxQuery::forEachPrim(perPrim, bvh, bounds, false);
         }
 
+#ifdef VIZ_DEBUG
+        sviz::Client().send(msg);
+#endif
+
         for (int i = 1; i <= nselements; i++) {
             pc_ptr[i] += pc_ptr[i - 1];
         }
@@ -905,13 +922,13 @@ namespace ssdf {
             auto normal = tri.normal();
             auto bounds = boxes[pid];
 
-            bounds = bounds.including(tri.a + normal * extrusion);
-            bounds = bounds.including(tri.b + normal * extrusion);
-            bounds = bounds.including(tri.c + normal * extrusion);
+            bounds = bounds.including(tri.a + normal * static_cast<float>(extrusion));
+            bounds = bounds.including(tri.b + normal * static_cast<float>(extrusion));
+            bounds = bounds.including(tri.c + normal * static_cast<float>(extrusion));
 
-            bounds = bounds.including(tri.a - normal * extrusion);
-            bounds = bounds.including(tri.b - normal * extrusion);
-            bounds = bounds.including(tri.c - normal * extrusion);
+            bounds = bounds.including(tri.a - normal * static_cast<float>(inner_scale * extrusion));
+            bounds = bounds.including(tri.b - normal * static_cast<float>(inner_scale * extrusion));
+            bounds = bounds.including(tri.c - normal * static_cast<float>(inner_scale * extrusion));
 
             auto perPrim = [pid, elements, pc_ptr, bookkeeping, idx](uint32_t tid) {
                 // Skip connected elements
@@ -987,7 +1004,12 @@ namespace ssdf {
             const vec3f dc = quad.c - quad.d;
             const vec3f ad = quad.d - quad.a;
             const vec3f bc = quad.c - quad.b;
-            return Quad{cuBQL::cross(ab, ad), cuBQL::cross(ab, bc), cuBQL::cross(dc, bc), cuBQL::cross(dc, ad)};
+            auto q = Quad{cuBQL::cross(ab, ad), cuBQL::cross(ab, bc), cuBQL::cross(dc, bc), cuBQL::cross(dc, ad)};
+            q.a = normalize(q.a);
+            q.b = normalize(q.b);
+            q.c = normalize(q.c);
+            q.d = normalize(q.d);
+            return q;
         };
 
         std::vector<box3f> boxes(nselements);
@@ -1004,21 +1026,28 @@ namespace ssdf {
             pc_ptr[i] = 0;
         }
 
+        const T inner_scale = 0.1;
+
+#ifdef VIZ_DEBUG
+        sviz::Message msg("bvh-boxes");
+#endif
+
 #pragma omp parallel for
         for (int pid = 0; pid < nselements; pid++) {
             auto quad = get_quad(pid);
             auto normal = quad_normal(quad);
             auto bounds = boxes[pid];
 
-            bounds = bounds.including(quad.a + normal.a * extrusion);
-            bounds = bounds.including(quad.b + normal.b * extrusion);
-            bounds = bounds.including(quad.c + normal.c * extrusion);
-            bounds = bounds.including(quad.d + normal.d * extrusion);
+            // TODO: Remove the static casts, instead define the proper cuBQL types based on the G template parameter
+            bounds = bounds.including(quad.a + normal.a * static_cast<float>(extrusion));
+            bounds = bounds.including(quad.b + normal.b * static_cast<float>(extrusion));
+            bounds = bounds.including(quad.c + normal.c * static_cast<float>(extrusion));
+            bounds = bounds.including(quad.d + normal.d * static_cast<float>(extrusion));
 
-            bounds = bounds.including(quad.a - normal.a * extrusion);
-            bounds = bounds.including(quad.b - normal.b * extrusion);
-            bounds = bounds.including(quad.c - normal.c * extrusion);
-            bounds = bounds.including(quad.d - normal.d * extrusion);
+            bounds = bounds.including(quad.a - normal.a * static_cast<float>(inner_scale * extrusion));
+            bounds = bounds.including(quad.b - normal.b * static_cast<float>(inner_scale * extrusion));
+            bounds = bounds.including(quad.c - normal.c * static_cast<float>(inner_scale * extrusion));
+            bounds = bounds.including(quad.d - normal.d * static_cast<float>(inner_scale * extrusion));
 
             auto perPrim = [pid, elements, pc_ptr](uint32_t tid) {
                 // Skip connected elements
@@ -1030,14 +1059,29 @@ namespace ssdf {
                     }
                 }
 
-#pragma omp atomic update
+                // #pragma omp atomic update
                 pc_ptr[pid + 1]++;
 
                 return CUBQL_CONTINUE_TRAVERSAL;
             };
 
+#ifdef VIZ_DEBUG
+            if (pc_ptr[pid + 1]) {
+                msg.aabb_soa(sviz::view(&bounds.lower.x, 1),
+                             sviz::view(&bounds.lower.y, 1),
+                             sviz::view(&bounds.lower.z, 1),
+                             sviz::view(&bounds.upper.x, 1),
+                             sviz::view(&bounds.upper.y, 1),
+                             sviz::view(&bounds.upper.z, 1));
+            }
+#endif
+
             cuBQL::fixedBoxQuery::forEachPrim(perPrim, bvh, bounds, false);
         }
+
+#ifdef VIZ_DEBUG
+        sviz::Client().send(msg);
+#endif
 
         for (int i = 1; i <= nselements; i++) {
             pc_ptr[i] += pc_ptr[i - 1];
@@ -1052,15 +1096,15 @@ namespace ssdf {
             auto normal = quad_normal(quad);
             auto bounds = boxes[pid];
 
-            bounds = bounds.including(quad.a + normal.a * extrusion);
-            bounds = bounds.including(quad.b + normal.b * extrusion);
-            bounds = bounds.including(quad.c + normal.c * extrusion);
-            bounds = bounds.including(quad.d + normal.d * extrusion);
+            bounds = bounds.including(quad.a + normal.a * static_cast<float>(extrusion));
+            bounds = bounds.including(quad.b + normal.b * static_cast<float>(extrusion));
+            bounds = bounds.including(quad.c + normal.c * static_cast<float>(extrusion));
+            bounds = bounds.including(quad.d + normal.d * static_cast<float>(extrusion));
 
-            bounds = bounds.including(quad.a - normal.a * extrusion);
-            bounds = bounds.including(quad.b - normal.b * extrusion);
-            bounds = bounds.including(quad.c - normal.c * extrusion);
-            bounds = bounds.including(quad.d - normal.d * extrusion);
+            bounds = bounds.including(quad.a - normal.a * static_cast<float>(inner_scale * extrusion));
+            bounds = bounds.including(quad.b - normal.b * static_cast<float>(inner_scale * extrusion));
+            bounds = bounds.including(quad.c - normal.c * static_cast<float>(inner_scale * extrusion));
+            bounds = bounds.including(quad.d - normal.d * static_cast<float>(inner_scale * extrusion));
 
             auto perPrim = [pid, elements, pc_ptr, bookkeeping, idx](uint32_t tid) {
                 // Skip connected elements
@@ -1074,7 +1118,7 @@ namespace ssdf {
 
                 ptrdiff_t bk;
 
-#pragma omp atomic capture
+                // #pragma omp atomic capture
                 bk = bookkeeping[pid]++;
                 idx[pc_ptr[pid] + bk] = tid;
 
@@ -1345,6 +1389,50 @@ namespace ssdf {
                                                                     float *const SSDF_RESTRICT,
                                                                     const bool);
 
+    template int closest_within_radius_quads_bvh<float, double, int>(const ptrdiff_t,
+                                                                     const float *const SSDF_RESTRICT,
+                                                                     const float *const SSDF_RESTRICT,
+                                                                     const float *const SSDF_RESTRICT,
+                                                                     const ptrdiff_t,
+                                                                     const int *const SSDF_RESTRICT,
+                                                                     const int *const SSDF_RESTRICT,
+                                                                     const int *const SSDF_RESTRICT,
+                                                                     const int *const SSDF_RESTRICT,
+                                                                     const ptrdiff_t,
+                                                                     const float *const SSDF_RESTRICT,
+                                                                     const float *const SSDF_RESTRICT,
+                                                                     const float *const SSDF_RESTRICT,
+                                                                     const ptrdiff_t,
+                                                                     const double *const SSDF_RESTRICT,
+                                                                     int *const SSDF_RESTRICT,
+                                                                     double *const SSDF_RESTRICT,
+                                                                     double *const SSDF_RESTRICT,
+                                                                     double *const SSDF_RESTRICT,
+                                                                     double *const SSDF_RESTRICT,
+                                                                     const bool);
+
+    template int closest_within_radius_quads_bvh<double, double, int>(const ptrdiff_t,
+                                                                      const double *const SSDF_RESTRICT,
+                                                                      const double *const SSDF_RESTRICT,
+                                                                      const double *const SSDF_RESTRICT,
+                                                                      const ptrdiff_t,
+                                                                      const int *const SSDF_RESTRICT,
+                                                                      const int *const SSDF_RESTRICT,
+                                                                      const int *const SSDF_RESTRICT,
+                                                                      const int *const SSDF_RESTRICT,
+                                                                      const ptrdiff_t,
+                                                                      const double *const SSDF_RESTRICT,
+                                                                      const double *const SSDF_RESTRICT,
+                                                                      const double *const SSDF_RESTRICT,
+                                                                      const ptrdiff_t,
+                                                                      const double *const SSDF_RESTRICT,
+                                                                      int *const SSDF_RESTRICT,
+                                                                      double *const SSDF_RESTRICT,
+                                                                      double *const SSDF_RESTRICT,
+                                                                      double *const SSDF_RESTRICT,
+                                                                      double *const SSDF_RESTRICT,
+                                                                      const bool);
+
     template int closest_within_radius_quads_local_bvh<float, float, int>(const ptrdiff_t,
                                                                           const float *const SSDF_RESTRICT,
                                                                           const float *const SSDF_RESTRICT,
@@ -1365,6 +1453,48 @@ namespace ssdf {
                                                                           float *const SSDF_RESTRICT,
                                                                           float *const SSDF_RESTRICT,
                                                                           const bool);
+
+    template int closest_within_radius_quads_local_bvh<float, double, int>(const ptrdiff_t,
+                                                                           const float *const SSDF_RESTRICT,
+                                                                           const float *const SSDF_RESTRICT,
+                                                                           const float *const SSDF_RESTRICT,
+                                                                           const ptrdiff_t,
+                                                                           const int *const SSDF_RESTRICT,
+                                                                           const int *const SSDF_RESTRICT,
+                                                                           const int *const SSDF_RESTRICT,
+                                                                           const int *const SSDF_RESTRICT,
+                                                                           const ptrdiff_t,
+                                                                           const float *const SSDF_RESTRICT,
+                                                                           const float *const SSDF_RESTRICT,
+                                                                           const float *const SSDF_RESTRICT,
+                                                                           const ptrdiff_t,
+                                                                           const double *const SSDF_RESTRICT,
+                                                                           int *const SSDF_RESTRICT,
+                                                                           double *const SSDF_RESTRICT,
+                                                                           double *const SSDF_RESTRICT,
+                                                                           double *const SSDF_RESTRICT,
+                                                                           const bool);
+
+    template int closest_within_radius_quads_local_bvh<double, double, int>(const ptrdiff_t,
+                                                                            const double *const SSDF_RESTRICT,
+                                                                            const double *const SSDF_RESTRICT,
+                                                                            const double *const SSDF_RESTRICT,
+                                                                            const ptrdiff_t,
+                                                                            const int *const SSDF_RESTRICT,
+                                                                            const int *const SSDF_RESTRICT,
+                                                                            const int *const SSDF_RESTRICT,
+                                                                            const int *const SSDF_RESTRICT,
+                                                                            const ptrdiff_t,
+                                                                            const double *const SSDF_RESTRICT,
+                                                                            const double *const SSDF_RESTRICT,
+                                                                            const double *const SSDF_RESTRICT,
+                                                                            const ptrdiff_t,
+                                                                            const double *const SSDF_RESTRICT,
+                                                                            int *const SSDF_RESTRICT,
+                                                                            double *const SSDF_RESTRICT,
+                                                                            double *const SSDF_RESTRICT,
+                                                                            double *const SSDF_RESTRICT,
+                                                                            const bool);
 
     template int potential_contact_triangles_bvh<float, float, int, int>(const ptrdiff_t,
                                                                          const int *const SSDF_RESTRICT,
@@ -1390,4 +1520,29 @@ namespace ssdf {
                                                                      const float,
                                                                      ptrdiff_t *const SSDF_RESTRICT,
                                                                      int **const SSDF_RESTRICT);
+
+    template int potential_contact_triangles_bvh<double, double, int, int>(const ptrdiff_t,
+                                                                           const int *const SSDF_RESTRICT,
+                                                                           const int *const SSDF_RESTRICT,
+                                                                           const int *const SSDF_RESTRICT,
+                                                                           const ptrdiff_t,
+                                                                           const double *const SSDF_RESTRICT,
+                                                                           const double *const SSDF_RESTRICT,
+                                                                           const double *const SSDF_RESTRICT,
+                                                                           const double,
+                                                                           ptrdiff_t *const SSDF_RESTRICT,
+                                                                           int **const SSDF_RESTRICT);
+
+    template int potential_contact_quads_bvh<double, double, int, int>(const ptrdiff_t,
+                                                                       const int *const SSDF_RESTRICT,
+                                                                       const int *const SSDF_RESTRICT,
+                                                                       const int *const SSDF_RESTRICT,
+                                                                       const int *const SSDF_RESTRICT,
+                                                                       const ptrdiff_t,
+                                                                       const double *const SSDF_RESTRICT,
+                                                                       const double *const SSDF_RESTRICT,
+                                                                       const double *const SSDF_RESTRICT,
+                                                                       const double,
+                                                                       ptrdiff_t *const SSDF_RESTRICT,
+                                                                       int **const SSDF_RESTRICT);
 }  // namespace ssdf
