@@ -203,12 +203,12 @@ int main(int argc, char *argv[]) {
     for (size_t folder_idx = 0; folder_idx < surf_folders.size(); folder_idx++) {
         const char *surf_folder = surf_folders[folder_idx];
 
-        std::string surf_x_path = make_path(surf_folder, "x.raw");
-        std::string surf_y_path = make_path(surf_folder, "y.raw");
-        std::string surf_z_path = make_path(surf_folder, "z.raw");
-        std::string surf_i0_path = make_path(surf_folder, "i0.raw");
-        std::string surf_i1_path = make_path(surf_folder, "i1.raw");
-        std::string surf_i2_path = make_path(surf_folder, "i2.raw");
+        std::string surf_x_path = make_path(surf_folder, "x.float32");
+        std::string surf_y_path = make_path(surf_folder, "y.float32");
+        std::string surf_z_path = make_path(surf_folder, "z.float32");
+        std::string surf_i0_path = make_path(surf_folder, "i0.int32");
+        std::string surf_i1_path = make_path(surf_folder, "i1.int32");
+        std::string surf_i2_path = make_path(surf_folder, "i2.int32");
 
         // Check all files exist
         long x_size = check_file_size(surf_x_path.c_str(), sizeof(G));
@@ -247,9 +247,9 @@ int main(int argc, char *argv[]) {
     }
 
     // Check points folder files
-    std::string points_x_path = make_path(points_folder, "x.raw");
-    std::string points_y_path = make_path(points_folder, "y.raw");
-    std::string points_z_path = make_path(points_folder, "z.raw");
+    std::string points_x_path = make_path(points_folder, "x.float32");
+    std::string points_y_path = make_path(points_folder, "y.float32");
+    std::string points_z_path = make_path(points_folder, "z.float32");
 
     long points_x_size = check_file_size(points_x_path.c_str(), sizeof(G));
     if (points_x_size < 0) {
@@ -359,9 +359,9 @@ int main(int argc, char *argv[]) {
                nselements);
 
         // Read surface point coordinates
-        std::string surf_x_path = make_path(surf_folder, "x.raw");
-        std::string surf_y_path = make_path(surf_folder, "y.raw");
-        std::string surf_z_path = make_path(surf_folder, "z.raw");
+        std::string surf_x_path = make_path(surf_folder, "x.float32");
+        std::string surf_y_path = make_path(surf_folder, "y.float32");
+        std::string surf_z_path = make_path(surf_folder, "z.float32");
 
         if (read_raw_file(surf_x_path.c_str(), sx.data(), sizeof(G)) != nspoints ||
             read_raw_file(surf_y_path.c_str(), sy.data(), sizeof(G)) != nspoints ||
@@ -371,9 +371,9 @@ int main(int argc, char *argv[]) {
         }
 
         // Read surface element indices
-        std::string surf_i0_path = make_path(surf_folder, "i0.raw");
-        std::string surf_i1_path = make_path(surf_folder, "i1.raw");
-        std::string surf_i2_path = make_path(surf_folder, "i2.raw");
+        std::string surf_i0_path = make_path(surf_folder, "i0.int32");
+        std::string surf_i1_path = make_path(surf_folder, "i1.int32");
+        std::string surf_i2_path = make_path(surf_folder, "i2.int32");
 
         if (read_raw_file(surf_i0_path.c_str(), s0.data(), sizeof(I)) != nselements ||
             read_raw_file(surf_i1_path.c_str(), s1.data(), sizeof(I)) != nselements ||
