@@ -906,7 +906,10 @@ namespace ssdf {
         }
 
 #ifdef VIZ_DEBUG
-        sviz::Client().send(msg);
+        try {
+            sviz::Client().send(msg);
+        } catch (const std::exception &) {
+        }
 #endif
 
         for (int i = 1; i <= nselements; i++) {
@@ -1080,7 +1083,10 @@ namespace ssdf {
         }
 
 #ifdef VIZ_DEBUG
-        sviz::Client().send(msg);
+        try {
+            sviz::Client().send(msg);
+        } catch (const std::exception &) {
+        }
 #endif
 
         for (int i = 1; i <= nselements; i++) {
