@@ -179,6 +179,46 @@ namespace ssdf {
                                     const T extrusion,
                                     ptrdiff_t *const SSDF_RESTRICT pc_ptr,
                                     F **const SSDF_RESTRICT out_pc_idx);
+
+    template <typename G, typename T, typename I>
+    int sample_sqedf_bvh(const ptrdiff_t nselements,
+                         const I *const SSDF_RESTRICT s0,
+                         const I *const SSDF_RESTRICT s1,
+                         const I *const SSDF_RESTRICT s2,
+                         const ptrdiff_t nspoints,
+                         const G *const SSDF_RESTRICT sx,
+                         const G *const SSDF_RESTRICT sy,
+                         const G *const SSDF_RESTRICT sz,
+                         const ptrdiff_t nx,
+                         const ptrdiff_t ny,
+                         const ptrdiff_t nz,
+                         const G xmin,
+                         const G ymin,
+                         const G zmin,
+                         const G xmax,
+                         const G ymax,
+                         const G zmax,
+                         T *const SSDF_RESTRICT out);
+
+    template <typename G, typename I>
+    int sample_inside_bvh(const ptrdiff_t nselements,
+                          const I *const SSDF_RESTRICT s0,
+                          const I *const SSDF_RESTRICT s1,
+                          const I *const SSDF_RESTRICT s2,
+                          const ptrdiff_t nspoints,
+                          const G *const SSDF_RESTRICT sx,
+                          const G *const SSDF_RESTRICT sy,
+                          const G *const SSDF_RESTRICT sz,
+                          const ptrdiff_t nx,
+                          const ptrdiff_t ny,
+                          const ptrdiff_t nz,
+                          const G xmin,
+                          const G ymin,
+                          const G zmin,
+                          const G xmax,
+                          const G ymax,
+                          const G zmax,
+                          uint8_t *const SSDF_RESTRICT out);
 }  // namespace ssdf
 
 #endif  // SSDF_BVH_HPP

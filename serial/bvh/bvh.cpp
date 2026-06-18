@@ -1551,4 +1551,215 @@ namespace ssdf {
                                                                        const double,
                                                                        ptrdiff_t *const SSDF_RESTRICT,
                                                                        int **const SSDF_RESTRICT);
+
+    template <typename G, typename T, typename I>
+    int sample_sqedf_bvh(const ptrdiff_t nselements,
+                         const I *const SSDF_RESTRICT s0,
+                         const I *const SSDF_RESTRICT s1,
+                         const I *const SSDF_RESTRICT s2,
+                         const ptrdiff_t nspoints,
+                         const G *const SSDF_RESTRICT sx,
+                         const G *const SSDF_RESTRICT sy,
+                         const G *const SSDF_RESTRICT sz,
+                         const ptrdiff_t nx,
+                         const ptrdiff_t ny,
+                         const ptrdiff_t nz,
+                         const G xmin,
+                         const G ymin,
+                         const G zmin,
+                         const G xmax,
+                         const G ymax,
+                         const G zmax,
+                         T *const SSDF_RESTRICT out) {
+        (void)nspoints;
+
+        const G hx = (nx > 1) ? (xmax - xmin) / (nx - 1) : G(0);
+        const G hy = (ny > 1) ? (ymax - ymin) / (ny - 1) : G(0);
+        const G hz = (nz > 1) ? (zmax - zmin) / (nz - 1) : G(0);
+
+        using cuBQL::box3f;
+        using cuBQL::bvh3f;
+        using cuBQL::Triangle;
+        using cuBQL::vec3f;
+        using bvh_t = bvh3f;
+
+        std::vector<Triangle> triangles(nselements);
+        std::vector<box3f> boxes(nselements);
+        for (ptrdiff_t i = 0; i < nselements; i++) {
+            triangles[i] = Triangle(vec3f(sx[s0[i]], sy[s0[i]], sz[s0[i]]),
+                                    vec3f(sx[s1[i]], sy[s1[i]], sz[s1[i]]),
+                                    vec3f(sx[s2[i]], sy[s2[i]], sz[s2[i]]));
+            boxes[i] = triangles[i].bounds();
+        }
+
+        bvh_t bvh;
+        cuBQL::cpuBuilder(bvh, boxes.data(), boxes.size(), cuBQL::BuildConfig());
+
+#pragma omp parallel for collapse(3)
+        for (ptrdiff_t k = 0; k < nz; k++) {
+            for (ptrdiff_t j = 0; j < ny; j++) {
+                for (ptrdiff_t i = 0; i < nx; i++) {
+                    const G x = xmin + i * hx;
+                    const G y = ymin + j * hy;
+                    const G z = zmin + k * hz;
+
+                    ptrdiff_t tid = i + j * nx + k * nx * ny;
+
+                    const T best_sq = out[tid];
+
+                    vec3f queryPoint(x, y, z);
+                    cuBQL::triangles::CPAT cpat;
+                    cpat.sqrDist = (float)best_sq;
+                    cpat.runQuery(triangles.data(), bvh, queryPoint);
+                    out[tid] = MIN(best_sq, (T)cpat.sqrDist);
+                }
+            }
+        }
+
+        return 0;
+    }
+
+    template <typename G, typename I>
+    int sample_inside_bvh(const ptrdiff_t nselements,
+                          const I *const SSDF_RESTRICT s0,
+                          const I *const SSDF_RESTRICT s1,
+                          const I *const SSDF_RESTRICT s2,
+                          const ptrdiff_t nspoints,
+                          const G *const SSDF_RESTRICT sx,
+                          const G *const SSDF_RESTRICT sy,
+                          const G *const SSDF_RESTRICT sz,
+                          const ptrdiff_t nx,
+                          const ptrdiff_t ny,
+                          const ptrdiff_t nz,
+                          const G xmin,
+                          const G ymin,
+                          const G zmin,
+                          const G xmax,
+                          const G ymax,
+                          const G zmax,
+                          uint8_t *const SSDF_RESTRICT out) {
+        (void)nspoints;
+
+        const G hx = (nx > 1) ? (xmax - xmin) / (nx - 1) : G(0);
+        const G hy = (ny > 1) ? (ymax - ymin) / (ny - 1) : G(0);
+        const G hz = (nz > 1) ? (zmax - zmin) / (nz - 1) : G(0);
+
+        using cuBQL::box3f;
+        using cuBQL::bvh3f;
+        using cuBQL::Triangle;
+        using cuBQL::vec3f;
+        using bvh_t = bvh3f;
+
+        std::vector<box3f> boxes(nselements);
+        for (ptrdiff_t i = 0; i < nselements; i++) {
+            auto tri = Triangle(vec3f(sx[s0[i]], sy[s0[i]], sz[s0[i]]),
+                                vec3f(sx[s1[i]], sy[s1[i]], sz[s1[i]]),
+                                vec3f(sx[s2[i]], sy[s2[i]], sz[s2[i]]));
+            boxes[i] = tri.bounds();
+        }
+
+        bvh_t bvh;
+        cuBQL::cpuBuilder(bvh, boxes.data(), boxes.size(), cuBQL::BuildConfig());
+
+        auto get_triangle = [s0, s1, s2, sx, sy, sz](uint32_t primID) {
+            return Triangle(vec3f(sx[s0[primID]], sy[s0[primID]], sz[s0[primID]]),
+                            vec3f(sx[s1[primID]], sy[s1[primID]], sz[s1[primID]]),
+                            vec3f(sx[s2[primID]], sy[s2[primID]], sz[s2[primID]]));
+        };
+
+#pragma omp parallel for collapse(3)
+        for (ptrdiff_t k = 0; k < nz; k++) {
+            for (ptrdiff_t j = 0; j < ny; j++) {
+                for (ptrdiff_t i = 0; i < nx; i++) {
+                    const G x = xmin + i * hx;
+                    const G y = ymin + j * hy;
+                    const G z = zmin + k * hz;
+
+                    ptrdiff_t tid = i + j * nx + k * nx * ny;
+
+                    vec3f queryPoint(x, y, z);
+                    bool inside = cuBQL::triangles::pointIsInsideSurface(bvh, get_triangle, queryPoint);
+                    out[tid] = inside ? 1 : 0;
+                }
+            }
+        }
+
+        return 0;
+    }
+
+    template int sample_sqedf_bvh<float, float, int>(const ptrdiff_t,
+                                                     const int *const SSDF_RESTRICT,
+                                                     const int *const SSDF_RESTRICT,
+                                                     const int *const SSDF_RESTRICT,
+                                                     const ptrdiff_t,
+                                                     const float *const SSDF_RESTRICT,
+                                                     const float *const SSDF_RESTRICT,
+                                                     const float *const SSDF_RESTRICT,
+                                                     const ptrdiff_t,
+                                                     const ptrdiff_t,
+                                                     const ptrdiff_t,
+                                                     const float,
+                                                     const float,
+                                                     const float,
+                                                     const float,
+                                                     const float,
+                                                     const float,
+                                                     float *const SSDF_RESTRICT);
+
+    template int sample_sqedf_bvh<double, double, int>(const ptrdiff_t,
+                                                       const int *const SSDF_RESTRICT,
+                                                       const int *const SSDF_RESTRICT,
+                                                       const int *const SSDF_RESTRICT,
+                                                       const ptrdiff_t,
+                                                       const double *const SSDF_RESTRICT,
+                                                       const double *const SSDF_RESTRICT,
+                                                       const double *const SSDF_RESTRICT,
+                                                       const ptrdiff_t,
+                                                       const ptrdiff_t,
+                                                       const ptrdiff_t,
+                                                       const double,
+                                                       const double,
+                                                       const double,
+                                                       const double,
+                                                       const double,
+                                                       const double,
+                                                       double *const SSDF_RESTRICT);
+
+    template int sample_inside_bvh<float, int>(const ptrdiff_t,
+                                               const int *const SSDF_RESTRICT,
+                                               const int *const SSDF_RESTRICT,
+                                               const int *const SSDF_RESTRICT,
+                                               const ptrdiff_t,
+                                               const float *const SSDF_RESTRICT,
+                                               const float *const SSDF_RESTRICT,
+                                               const float *const SSDF_RESTRICT,
+                                               const ptrdiff_t,
+                                               const ptrdiff_t,
+                                               const ptrdiff_t,
+                                               const float,
+                                               const float,
+                                               const float,
+                                               const float,
+                                               const float,
+                                               const float,
+                                               uint8_t *const SSDF_RESTRICT);
+
+    template int sample_inside_bvh<double, int>(const ptrdiff_t,
+                                                const int *const SSDF_RESTRICT,
+                                                const int *const SSDF_RESTRICT,
+                                                const int *const SSDF_RESTRICT,
+                                                const ptrdiff_t,
+                                                const double *const SSDF_RESTRICT,
+                                                const double *const SSDF_RESTRICT,
+                                                const double *const SSDF_RESTRICT,
+                                                const ptrdiff_t,
+                                                const ptrdiff_t,
+                                                const ptrdiff_t,
+                                                const double,
+                                                const double,
+                                                const double,
+                                                const double,
+                                                const double,
+                                                const double,
+                                                uint8_t *const SSDF_RESTRICT);
 }  // namespace ssdf
