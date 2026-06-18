@@ -11,7 +11,9 @@ set(SSDF_BINARY_PRIVATE_LINK_OPTIONS "")
 
 
 if(SSDF_ENABLE_SMESH)
-    find_package(smesh CONFIG REQUIRED)
+    if(NOT TARGET smesh::smesh)
+        find_package(smesh CONFIG REQUIRED)
+    endif()
     list(APPEND SSDF_PUBLIC_DEP_LIBRARIES smesh::smesh)
 
     function(ssdf_inherit_feature_from_smesh feature_name dependency_token)
