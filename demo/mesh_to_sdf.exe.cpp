@@ -23,14 +23,23 @@ namespace {
     }
 
     template <typename G>
-    static void expand_box(G &xmin, G &xmax, G &ymin, G &ymax, G &zmin, G &zmax, const G scale, const G margin) {
+    static void expand_box(G &xmin,
+                           G &xmax,
+                           G &ymin,
+                           G &ymax,
+                           G &zmin,
+                           G &zmax,
+                           const G scale,
+                           const G margin_x,
+                           const G margin_y,
+                           const G margin_z) {
         const G cx = (xmin + xmax) * G(0.5);
         const G cy = (ymin + ymax) * G(0.5);
         const G cz = (zmin + zmax) * G(0.5);
 
-        const G hx = (xmax - xmin) * G(0.5) * scale + margin;
-        const G hy = (ymax - ymin) * G(0.5) * scale + margin;
-        const G hz = (zmax - zmin) * G(0.5) * scale + margin;
+        const G hx = (xmax - xmin) * G(0.5) * scale + margin_x;
+        const G hy = (ymax - ymin) * G(0.5) * scale + margin_y;
+        const G hz = (zmax - zmin) * G(0.5) * scale + margin_z;
 
         xmin = cx - hx;
         xmax = cx + hx;
@@ -76,8 +85,11 @@ int main(int argc, char **argv) {
         ssdf::compute_aabb(mesh->n_nodes(), points[0], points[1], points[2], &xmin, &xmax, &ymin, &ymax, &zmin, &zmax);
 
         const G margin = smesh::Env::read("SSDF_MARGIN", G(0));
+        const G margin_x = smesh::Env::read("SSDF_MARGIN_X", margin);
+        const G margin_y = smesh::Env::read("SSDF_MARGIN_Y", margin);
+        const G margin_z = smesh::Env::read("SSDF_MARGIN_Z", margin);
 
-        expand_box(xmin, xmax, ymin, ymax, zmin, zmax, T(1), margin);
+        expand_box(xmin, xmax, ymin, ymax, zmin, zmax, T(1), margin_x, margin_y, margin_z);
 
         auto sdf = smesh::Grid<T>::create(smesh::Communicator::self(), nx, ny, nz, xmin, ymin, zmin, xmax, ymax, zmax);
         T *const out = sdf->data();
