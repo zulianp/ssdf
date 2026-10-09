@@ -144,7 +144,10 @@ set_target_properties(ssdf PROPERTIES
 )
 
 if(SSDF_ENABLE_CUDA)
-    set_property(TARGET ssdf PROPERTY CUDA_SEPARABLE_COMPILATION ON)
+    set_target_properties(ssdf PROPERTIES
+        CUDA_SEPARABLE_COMPILATION ON
+        CUDA_RESOLVE_DEVICE_SYMBOLS ON
+    )
 endif()
 
 if(SSDF_PUBLIC_DEP_LIBRARIES)
