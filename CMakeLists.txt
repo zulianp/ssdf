@@ -232,6 +232,8 @@ foreach(test_src IN LISTS SSDF_TEST_SOURCES)
     get_filename_component(test_name "${test_src}" NAME_WE)
     add_executable(${test_name} "${test_src}")
     ssdf_configure_binary(${test_name})
+    # The tests check with assert(): keep it active in Release builds.
+    target_compile_options(${test_name} PRIVATE $<IF:$<CXX_COMPILER_ID:MSVC>,/UNDEBUG,-UNDEBUG>)
     add_test(NAME ${test_name} COMMAND ${test_name})
     list(APPEND SSDF_TEST_TARGETS ${test_name})
 endforeach()

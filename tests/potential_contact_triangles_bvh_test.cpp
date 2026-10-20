@@ -51,8 +51,8 @@ int main() {
 
     const ptrdiff_t nselements = 4;
     const I i0[nselements] = {0, 3, 0, 7};
-    const I i1[nselements] = {1, 4, 2, 8};
-    const I i2[nselements] = {2, 5, 6, 9};
+    const I i1[nselements] = {1, 5, 2, 8};
+    const I i2[nselements] = {2, 4, 6, 9};
 
     ptrdiff_t pc_ptr[nselements + 1] = {-7, -7, -7, -7, -7};
     F *pc_idx = nullptr;

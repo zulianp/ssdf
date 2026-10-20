@@ -29,14 +29,14 @@ int main() {
     };
     const G sz[nspoints] = {
         0.0f, 0.0f, 0.0f,  0.0f,  0.2f,  0.2f,  0.2f, 0.2f, 0.0f, 0.0f,
-        0.5f, 0.0f, 0.75f, 0.75f, 1.25f, 0.75f, 0.0f, 0.0f, 0.0f, 0.0f,
+        0.5f, 0.0f, 0.6f,  0.6f,  1.1f,  0.6f,  0.0f, 0.0f, 0.0f, 0.0f,
     };
 
     const ptrdiff_t nselements = 5;
     const I i0[nselements] = {0, 4, 8, 12, 16};
-    const I i1[nselements] = {1, 5, 9, 13, 17};
+    const I i1[nselements] = {1, 7, 9, 15, 17};
     const I i2[nselements] = {2, 6, 10, 14, 18};
-    const I i3[nselements] = {3, 7, 11, 15, 19};
+    const I i3[nselements] = {3, 5, 11, 13, 19};
 
     ptrdiff_t pc_ptr[nselements + 1] = {-7, -7, -7, -7, -7, -7};
     F *pc_idx = nullptr;

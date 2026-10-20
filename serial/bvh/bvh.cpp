@@ -97,6 +97,9 @@ namespace ssdf {
                         T *const SSDF_RESTRICT w0,
                         T *const SSDF_RESTRICT w1,
                         T *const SSDF_RESTRICT w2) {
+        (void)nselements;
+        (void)nspoints;
+
 #pragma omp parallel for
         for (ptrdiff_t i = 0; i < npoints; i++) {
             const I tri = triangles[i];
@@ -131,6 +134,8 @@ namespace ssdf {
                               G *const SSDF_RESTRICT outy,
                               G *const SSDF_RESTRICT outz,
                               I *const SSDF_RESTRICT outtri) {
+        (void)nspoints;
+
         using cuBQL::box3f;
         using cuBQL::bvh3f;
         using cuBQL::divRoundUp;
@@ -221,6 +226,8 @@ namespace ssdf {
                     const G *const SSDF_RESTRICT sy,
                     const G *const SSDF_RESTRICT sz,
                     T *const SSDF_RESTRICT out) {
+        (void)nspoints;
+
         using cuBQL::box3f;
         using cuBQL::bvh3f;
         using cuBQL::divRoundUp;
@@ -316,6 +323,8 @@ namespace ssdf {
                           const G *const SSDF_RESTRICT sy,
                           const G *const SSDF_RESTRICT sz,
                           uint8_t *const SSDF_RESTRICT out) {
+        (void)nspoints;
+
         using cuBQL::box3f;
         using cuBQL::bvh3f;
         using cuBQL::Triangle;
@@ -482,6 +491,8 @@ namespace ssdf {
                                   T *const SSDF_RESTRICT closest_y,
                                   T *const SSDF_RESTRICT closest_z,
                                   const bool skip_self) {
+        (void)nspoints;
+
         using cuBQL::box3f;
         using cuBQL::bvh3f;
         using cuBQL::Triangle;
@@ -580,6 +591,8 @@ namespace ssdf {
                                         T *const SSDF_RESTRICT closest_y,
                                         T *const SSDF_RESTRICT closest_z,
                                         const bool skip_self) {
+        (void)nspoints;
+
         using cuBQL::box3f;
         using cuBQL::bvh3f;
         using cuBQL::vec3f;

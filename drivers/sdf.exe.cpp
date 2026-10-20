@@ -32,7 +32,7 @@ void export_intervals(const ptrdiff_t nselements,
                       const I *const SSDF_RESTRICT s0,
                       const I *const SSDF_RESTRICT s1,
                       const I *const SSDF_RESTRICT s2,
-                      const ptrdiff_t nspoints,
+                      const ptrdiff_t /*nspoints*/,
                       const G *const SSDF_RESTRICT sx,
                       const G *const SSDF_RESTRICT sy,
                       const G *const SSDF_RESTRICT sz) {
@@ -115,7 +115,7 @@ static ptrdiff_t read_raw_file(const char *filepath, void *data, size_t element_
     }
 
     ptrdiff_t count = file_size / element_size;
-    if (fread(data, element_size, count, f) != count) {
+    if (fread(data, element_size, count, f) != (size_t)count) {
         fprintf(stderr, "Error: Failed to read file '%s'\n", filepath);
         fclose(f);
         return -1;
@@ -305,7 +305,7 @@ int main(int argc, char *argv[]) {
             return 1;
         }
 
-        if (fread(out.data(), sizeof(T), npoints, sdf_file) != npoints) {
+        if (fread(out.data(), sizeof(T), npoints, sdf_file) != (size_t)npoints) {
             fprintf(stderr, "Error: Failed to read SDF values from '%s'\n", SSDF_INPUT_SDF);
             fclose(sdf_file);
             return 1;
@@ -407,7 +407,7 @@ int main(int argc, char *argv[]) {
                 out_double[i] = double(out[i]);
             }
 
-            for (ptrdiff_t i = 0; i < sx.size(); ++i) {
+            for (ptrdiff_t i = 0; i < (ptrdiff_t)sx.size(); ++i) {
                 sx_double[i] = double(sx[i]);
                 sy_double[i] = double(sy[i]);
                 sz_double[i] = double(sz[i]);
@@ -467,7 +467,7 @@ int main(int argc, char *argv[]) {
     }
 
     // Write SDF results (values only, no count)
-    if (fwrite(out.data(), sizeof(T), npoints, fout) != npoints) {
+    if (fwrite(out.data(), sizeof(T), npoints, fout) != (size_t)npoints) {
         fprintf(stderr, "Error: Failed to write SDF results\n");
         fclose(fout);
         return 1;

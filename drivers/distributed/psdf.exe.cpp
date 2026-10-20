@@ -212,7 +212,7 @@ int main(int argc, char **argv) {
             out_double[i] = double(out[i]);
         }
 
-        for (ptrdiff_t i = 0; i < sx.size(); ++i) {
+        for (ptrdiff_t i = 0; i < (ptrdiff_t)sx.size(); ++i) {
             sx_double[i] = double(sx[i]);
             sy_double[i] = double(sy[i]);
             sz_double[i] = double(sz[i]);
