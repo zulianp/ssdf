@@ -5,6 +5,12 @@
 #include "cuBQL/traversal/fixedRadiusQuery.h"
 #include "edf/edf.hpp"
 
+#include <algorithm>
+#include <cmath>
+#include <cstdint>
+#include <unordered_map>
+#include <vector>
+
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 
 // #define VIZ_DEBUG
@@ -1632,6 +1638,165 @@ namespace ssdf {
         return 0;
     }
 
+    template <typename G, typename T, typename I>
+    int sample_sdf_bvh(const ptrdiff_t nselements,
+                       const I *const SSDF_RESTRICT s0,
+                       const I *const SSDF_RESTRICT s1,
+                       const I *const SSDF_RESTRICT s2,
+                       const ptrdiff_t nspoints,
+                       const G *const SSDF_RESTRICT sx,
+                       const G *const SSDF_RESTRICT sy,
+                       const G *const SSDF_RESTRICT sz,
+                       const ptrdiff_t nx,
+                       const ptrdiff_t ny,
+                       const ptrdiff_t nz,
+                       const G xmin,
+                       const G ymin,
+                       const G zmin,
+                       const G xmax,
+                       const G ymax,
+                       const G zmax,
+                       T *const SSDF_RESTRICT out) {
+        using cuBQL::box3f;
+        using cuBQL::bvh3f;
+        using cuBQL::Triangle;
+        using cuBQL::vec3f;
+
+        const G hx = (nx > 1) ? (xmax - xmin) / (nx - 1) : G(0);
+        const G hy = (ny > 1) ? (ymax - ymin) / (ny - 1) : G(0);
+        const G hz = (nz > 1) ? (zmax - zmin) / (nz - 1) : G(0);
+
+        // The pseudonormals: per face (unit), per vertex (angle-weighted sum of its faces'), and per
+        // face edge, local edge e from vertex e to vertex (e + 1) % 3 (the sum of the faces sharing
+        // it; the face's own on a boundary edge).
+        const I *const s[3] = {s0, s1, s2};
+        std::vector<double> face_n(3 * nselements, 0.0);
+        std::vector<double> vertex_n(3 * nspoints, 0.0);
+        std::vector<double> edge_n(9 * nselements, 0.0);
+        std::unordered_map<uint64_t, ptrdiff_t> edge_first;  // edge -> 3 * face + local edge
+        edge_first.reserve(size_t(3 * nselements));
+        for (ptrdiff_t t = 0; t < nselements; t++) {
+            double p[3][3];
+            for (int v = 0; v < 3; v++) {
+                p[v][0] = sx[s[v][t]];
+                p[v][1] = sy[s[v][t]];
+                p[v][2] = sz[s[v][t]];
+            }
+            const double u[3] = {p[1][0] - p[0][0], p[1][1] - p[0][1], p[1][2] - p[0][2]};
+            const double w[3] = {p[2][0] - p[0][0], p[2][1] - p[0][1], p[2][2] - p[0][2]};
+            double n[3] = {u[1] * w[2] - u[2] * w[1], u[2] * w[0] - u[0] * w[2], u[0] * w[1] - u[1] * w[0]};
+            const double len = std::sqrt(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]);
+            if (len > 0) {
+                for (int d = 0; d < 3; d++) n[d] /= len;
+            }
+            for (int d = 0; d < 3; d++) face_n[3 * t + d] = n[d];
+
+            for (int v = 0; v < 3; v++) {
+                const double *a = p[v], *b = p[(v + 1) % 3], *c = p[(v + 2) % 3];
+                const double e1[3] = {b[0] - a[0], b[1] - a[1], b[2] - a[2]};
+                const double e2[3] = {c[0] - a[0], c[1] - a[1], c[2] - a[2]};
+                const double l1 = std::sqrt(e1[0] * e1[0] + e1[1] * e1[1] + e1[2] * e1[2]);
+                const double l2 = std::sqrt(e2[0] * e2[0] + e2[1] * e2[1] + e2[2] * e2[2]);
+                const double cosine = (l1 > 0 && l2 > 0) ? (e1[0] * e2[0] + e1[1] * e2[1] + e1[2] * e2[2]) / (l1 * l2) : 1.0;
+                const double angle = std::acos(std::max(-1.0, std::min(1.0, cosine)));
+                for (int d = 0; d < 3; d++) vertex_n[3 * ptrdiff_t(s[v][t]) + d] += angle * n[d];
+            }
+
+            for (int e = 0; e < 3; e++) {
+                for (int d = 0; d < 3; d++) edge_n[9 * t + 3 * e + d] = n[d];
+                const uint64_t a = uint64_t(s[e][t]), b = uint64_t(s[(e + 1) % 3][t]);
+                const uint64_t key = std::min(a, b) * uint64_t(nspoints) + std::max(a, b);
+                auto found = edge_first.find(key);
+                if (found == edge_first.end()) {
+                    edge_first.emplace(key, 3 * t + e);
+                } else {
+                    const ptrdiff_t other = found->second;
+                    for (int d = 0; d < 3; d++) {
+                        const double sum = face_n[3 * (other / 3) + d] + n[d];
+                        edge_n[9 * t + 3 * e + d] = sum;
+                        edge_n[9 * (other / 3) + 3 * (other % 3) + d] = sum;
+                    }
+                }
+            }
+        }
+
+        std::vector<Triangle> triangles(nselements);
+        std::vector<box3f> boxes(nselements);
+        for (ptrdiff_t i = 0; i < nselements; i++) {
+            triangles[i] = Triangle(vec3f(sx[s0[i]], sy[s0[i]], sz[s0[i]]),
+                                    vec3f(sx[s1[i]], sy[s1[i]], sz[s1[i]]),
+                                    vec3f(sx[s2[i]], sy[s2[i]], sz[s2[i]]));
+            boxes[i] = triangles[i].bounds();
+        }
+        bvh3f bvh;
+        cuBQL::cpuBuilder(bvh, boxes.data(), boxes.size(), cuBQL::BuildConfig());
+
+        // Where on its triangle the closest point is, from its barycentric coordinates: a
+        // coordinate below `tol` puts it on the opposite edge, two on the remaining vertex. Erring
+        // towards an edge or a vertex is safe (their pseudonormal still separates the sides of a
+        // point whose closest point is inside the face); the closest point is single precision.
+        const double tol = 1e-4;
+
+#pragma omp parallel for collapse(3)
+        for (ptrdiff_t k = 0; k < nz; k++) {
+            for (ptrdiff_t j = 0; j < ny; j++) {
+                for (ptrdiff_t i = 0; i < nx; i++) {
+                    const double q[3] = {double(xmin + i * hx), double(ymin + j * hy), double(zmin + k * hz)};
+                    cuBQL::triangles::CPAT cpat;
+                    cpat.sqrDist = CUBQL_INF;
+                    cpat.runQuery(triangles.data(), bvh, vec3f(q[0], q[1], q[2]));
+                    const ptrdiff_t t = cpat.triangleIdx;
+                    const double c[3] = {cpat.P.x, cpat.P.y, cpat.P.z};
+
+                    // c = l0 a + l1 b + l2 c over the triangle's vertices.
+                    double a[3][3];
+                    for (int v = 0; v < 3; v++) {
+                        a[v][0] = sx[s[v][t]];
+                        a[v][1] = sy[s[v][t]];
+                        a[v][2] = sz[s[v][t]];
+                    }
+                    const double e1[3] = {a[1][0] - a[0][0], a[1][1] - a[0][1], a[1][2] - a[0][2]};
+                    const double e2[3] = {a[2][0] - a[0][0], a[2][1] - a[0][1], a[2][2] - a[0][2]};
+                    const double r[3] = {c[0] - a[0][0], c[1] - a[0][1], c[2] - a[0][2]};
+                    const double d11 = e1[0] * e1[0] + e1[1] * e1[1] + e1[2] * e1[2];
+                    const double d12 = e1[0] * e2[0] + e1[1] * e2[1] + e1[2] * e2[2];
+                    const double d22 = e2[0] * e2[0] + e2[1] * e2[1] + e2[2] * e2[2];
+                    const double r1 = r[0] * e1[0] + r[1] * e1[1] + r[2] * e1[2];
+                    const double r2 = r[0] * e2[0] + r[1] * e2[1] + r[2] * e2[2];
+                    const double det = d11 * d22 - d12 * d12;
+                    const double l1 = det > 0 ? (d22 * r1 - d12 * r2) / det : 0;
+                    const double l2 = det > 0 ? (d11 * r2 - d12 * r1) / det : 0;
+                    const double l[3] = {1 - l1 - l2, l1, l2};
+
+                    int small = 0, last_small = -1, last_large = -1;
+                    for (int v = 0; v < 3; v++) {
+                        if (l[v] < tol) {
+                            small++;
+                            last_small = v;
+                        } else {
+                            last_large = v;
+                        }
+                    }
+                    const double *n;
+                    if (small == 0) {
+                        n = &face_n[3 * t];
+                    } else if (small == 1) {
+                        // The edge opposite vertex v is local edge (v + 1) % 3.
+                        n = &edge_n[9 * t + 3 * ((last_small + 1) % 3)];
+                    } else {
+                        n = &vertex_n[3 * ptrdiff_t(s[last_large][t])];
+                    }
+
+                    const double dot = (q[0] - c[0]) * n[0] + (q[1] - c[1]) * n[1] + (q[2] - c[2]) * n[2];
+                    const T dist = T(std::sqrt(double(cpat.sqrDist)));
+                    out[i + j * nx + k * nx * ny] = dot < 0 ? -dist : dist;
+                }
+            }
+        }
+
+        return 0;
+    }
+
     template <typename G, typename I>
     int sample_inside_bvh(const ptrdiff_t nselements,
                           const I *const SSDF_RESTRICT s0,
@@ -1737,6 +1902,44 @@ namespace ssdf {
                                                        const double,
                                                        const double,
                                                        double *const SSDF_RESTRICT);
+
+    template int sample_sdf_bvh<float, float, int>(const ptrdiff_t,
+                                                const int *const SSDF_RESTRICT,
+                                                const int *const SSDF_RESTRICT,
+                                                const int *const SSDF_RESTRICT,
+                                                const ptrdiff_t,
+                                                const float *const SSDF_RESTRICT,
+                                                const float *const SSDF_RESTRICT,
+                                                const float *const SSDF_RESTRICT,
+                                                const ptrdiff_t,
+                                                const ptrdiff_t,
+                                                const ptrdiff_t,
+                                                const float,
+                                                const float,
+                                                const float,
+                                                const float,
+                                                const float,
+                                                const float,
+                                                float *const SSDF_RESTRICT);
+
+    template int sample_sdf_bvh<double, double, int>(const ptrdiff_t,
+                                                const int *const SSDF_RESTRICT,
+                                                const int *const SSDF_RESTRICT,
+                                                const int *const SSDF_RESTRICT,
+                                                const ptrdiff_t,
+                                                const double *const SSDF_RESTRICT,
+                                                const double *const SSDF_RESTRICT,
+                                                const double *const SSDF_RESTRICT,
+                                                const ptrdiff_t,
+                                                const ptrdiff_t,
+                                                const ptrdiff_t,
+                                                const double,
+                                                const double,
+                                                const double,
+                                                const double,
+                                                const double,
+                                                const double,
+                                                double *const SSDF_RESTRICT);
 
     template int sample_inside_bvh<float, int>(const ptrdiff_t,
                                                const int *const SSDF_RESTRICT,
