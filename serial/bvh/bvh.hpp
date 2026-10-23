@@ -200,6 +200,32 @@ namespace ssdf {
                          const G zmax,
                          T *const SSDF_RESTRICT out);
 
+    /// The signed distance to a triangulated surface on the grid's nodes: positive on the side its
+    /// triangles' normals (right-handed in s0, s1, s2) point to. The sign is that of (p - c) . n at the
+    /// closest point c, n the angle-weighted pseudonormal there (Baerentzen and Aanaes, IEEE TVCG
+    /// 11(3), 2005): the face's normal inside a face, the sum of the two faces' on an edge, the
+    /// angle-weighted sum of the incident faces' at a vertex. Exact for a closed, consistently
+    /// oriented surface, wherever p is; a ray-crossing count is not, through edges and vertices.
+    template <typename G, typename T, typename I>
+    int sample_sdf_bvh(const ptrdiff_t nselements,
+                       const I *const SSDF_RESTRICT s0,
+                       const I *const SSDF_RESTRICT s1,
+                       const I *const SSDF_RESTRICT s2,
+                       const ptrdiff_t nspoints,
+                       const G *const SSDF_RESTRICT sx,
+                       const G *const SSDF_RESTRICT sy,
+                       const G *const SSDF_RESTRICT sz,
+                       const ptrdiff_t nx,
+                       const ptrdiff_t ny,
+                       const ptrdiff_t nz,
+                       const G xmin,
+                       const G ymin,
+                       const G zmin,
+                       const G xmax,
+                       const G ymax,
+                       const G zmax,
+                       T *const SSDF_RESTRICT out);
+
     template <typename G, typename I>
     int sample_inside_bvh(const ptrdiff_t nselements,
                           const I *const SSDF_RESTRICT s0,

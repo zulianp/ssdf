@@ -86,6 +86,9 @@ if(SSDF_ENABLE_CUBIQL)
         message(FATAL_ERROR "cuBQL not found at ${cuBQL_DIR}. Clone submodules: git submodule update --init --recursive")
     endif()
     add_subdirectory(${cuBQL_DIR} "${CMAKE_BINARY_DIR}/_deps/cuBQL-build")
+    # Third-party headers: include as system so our -Werror does not apply to them.
+    get_target_property(_ssdf_cubql_includes cuBQL INTERFACE_INCLUDE_DIRECTORIES)
+    set_target_properties(cuBQL PROPERTIES INTERFACE_SYSTEM_INCLUDE_DIRECTORIES "${_ssdf_cubql_includes}")
     # Only link cuBQL in the build tree so install(EXPORT ssdfTargets) does not
     # reference a non-exported target. Requires a shared libssdf (or otherwise
     # self-contained link) so consumers are not missing cuBQL symbols.
