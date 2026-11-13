@@ -62,11 +62,6 @@ if(SSDF_ENABLE_OPENMP)
     list(APPEND SSDF_PUBLIC_DEP_LIBRARIES OpenMP::OpenMP_CXX)
 endif()
 
-if(SSDF_ENABLE_HIP AND NOT SSDF_ENABLE_CUDA)
-    message(FATAL_ERROR "SSDF_ENABLE_HIP=ON selects the backend of the device path, "
-                        "which SSDF_ENABLE_CUDA=ON turns on: set both.")
-endif()
-
 if(SSDF_ENABLE_HIP)
     # The .cu sources are compiled as HIP (see CMakeLists.txt). The architectures must be set
     # before enable_language.

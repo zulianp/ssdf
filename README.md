@@ -61,22 +61,23 @@
 - `SSDF_ENABLE_MPI`: Enable MPI support (default: OFF)
 - `SSDF_ENABLE_OPENMP`: Enable OpenMP support (default: OFF)
 - `SSDF_ENABLE_CUDA`: Enable CUDA support (default: OFF)
-- `SSDF_ENABLE_HIP`: With `SSDF_ENABLE_CUDA=ON`, compile the device BVH with HIP instead of CUDA, for AMD GPUs (default: OFF)
+- `SSDF_ENABLE_HIP`: Compile the device BVH with HIP instead of CUDA, for AMD GPUs; turns on `SSDF_ENABLE_CUDA` (default: OFF)
 - `SSDF_HIP_ARCHITECTURES`: AMD GPU architectures, used when `CMAKE_HIP_ARCHITECTURES` is not set (default: gfx942)
 - `SSDF_ENABLE_CUBIQL`: Use cuBQL for the BVH (default: ON)
 
 ### AMD GPUs (HIP)
 
 The device BVH (`serial/bvh/bvh.cu`, built on cuBQL) is written against the CUDA runtime API and
-compiles with HIP. `SSDF_ENABLE_CUDA=ON` turns the device path on; adding `SSDF_ENABLE_HIP=ON`
-compiles it with HIP instead of CUDA, together with cuBQL's GPU builder, which sorts with hipCUB.
+compiles with HIP. `SSDF_ENABLE_HIP=ON` compiles it with HIP instead of CUDA, together with
+cuBQL's GPU builder, which sorts with hipCUB. It also turns on `SSDF_ENABLE_CUDA`, the option for
+the device path, so it is the only option needed.
 
 Requirements: ROCm with HIP, hipCUB and rocPRIM, CMake 3.21 or newer (the first version with the
 HIP language), and the cuBQL submodule (`git submodule update --init external/cubql`).
 
 ```bash
 cmake -S . -B build-hip -DCMAKE_BUILD_TYPE=Release \
-    -DSSDF_ENABLE_CUDA=ON -DSSDF_ENABLE_HIP=ON -DSSDF_ENABLE_CUBIQL=ON \
+    -DSSDF_ENABLE_HIP=ON -DSSDF_ENABLE_CUBIQL=ON \
     -DSSDF_HIP_ARCHITECTURES=gfx942 \
     -DCMAKE_HIP_COMPILER=/path/to/rocm/clang++
 cmake --build build-hip -j 8
@@ -96,7 +97,7 @@ cmake --build build-hip -j 8
   nvcc. Its headers are compiled by ssdf's HIP sources.
 - **Floating point:** subnormals are kept (`-fno-gpu-flush-denormals-to-zero`), as nvcc keeps them
   by default.
-- **As a subproject:** set `SSDF_ENABLE_CUDA` and `SSDF_ENABLE_HIP` before `add_subdirectory`. If
+- **As a subproject:** set `SSDF_ENABLE_HIP` before `add_subdirectory`. If
   the parent has already enabled the HIP language, ssdf uses its settings. SFEM does this with
   `SFEM_ENABLE_HIP`.
 
