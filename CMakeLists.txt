@@ -134,6 +134,12 @@ ssdf_glob_files(
     PATTERNS ${SSDF_SERIAL_SOURCE_PATTERNS}
 )
 
+if(SSDF_ENABLE_HIP)
+    set(_ssdf_device_sources ${SSDF_SERIAL_SOURCES})
+    list(FILTER _ssdf_device_sources INCLUDE REGEX "\\.cu$")
+    set_source_files_properties(${_ssdf_device_sources} PROPERTIES LANGUAGE HIP)
+endif()
+
 add_library(ssdf ${SSDF_SERIAL_SOURCES})
 target_compile_features(ssdf PUBLIC cxx_std_17)
 ssdf_enable_strict_warnings(ssdf)
@@ -143,7 +149,15 @@ set_target_properties(ssdf PROPERTIES
     SOVERSION ${PROJECT_VERSION_MAJOR}
 )
 
-if(SSDF_ENABLE_CUDA)
+if(SSDF_ENABLE_HIP)
+    # hipCUB and rocPRIM headers, for the .cu files only (see SSDFDependencies.cmake).
+    foreach(_ssdf_hip_hdr_target hip::hipcub roc::rocprim)
+        target_include_directories(ssdf PRIVATE
+            "$<$<COMPILE_LANGUAGE:HIP>:$<TARGET_PROPERTY:${_ssdf_hip_hdr_target},INTERFACE_INCLUDE_DIRECTORIES>>")
+    endforeach()
+    # Subnormals are kept, as nvcc keeps them by default.
+    target_compile_options(ssdf PRIVATE "$<$<COMPILE_LANGUAGE:HIP>:-fno-gpu-flush-denormals-to-zero>")
+elseif(SSDF_ENABLE_CUDA)
     set_target_properties(ssdf PROPERTIES
         CUDA_SEPARABLE_COMPILATION ON
         CUDA_RESOLVE_DEVICE_SYMBOLS ON
