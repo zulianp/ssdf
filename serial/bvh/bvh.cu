@@ -1,16 +1,9 @@
 #include "bvh/bvh.hpp"
 
-// Before cuBQL: its device code calls the runtime by the CUDA names this maps under HIP.
-#include "ssdf_gpu_runtime.cuh"
-
 #define CUBQL_GPU_BUILDER_IMPLEMENTATION 1
 #define CUBQL_TRIANGLE_CPAT_IMPLEMENTATION 1
 
 #include "cuBQL/bvh.h"
-#if defined(SSDF_ENABLE_HIP)
-// cuBQL/bvh.h adds the GPU builder for nvcc (__CUDACC__) only; the builder itself takes HIP.
-#include "cuBQL/builder/cuda.h"
-#endif
 #include "cuBQL/queries/triangleData/closestPointOnAnyTriangle.h"
 
 #define MIN(a, b) ((a) < (b) ? (a) : (b))

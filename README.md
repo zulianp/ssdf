@@ -90,9 +90,11 @@ cmake --build build-hip -j 8
   standard ROCm install it is `$ROCM_PATH/llvm/bin/clang++`; module systems often put it
   elsewhere, so check with `which clang++` after loading ROCm. The other sources are compiled by
   the C++ compiler (for example GCC), and the library links `hip::host` publicly.
-- **Device memory:** `serial/bvh/ssdf_gpu_runtime.cuh` maps the CUDA names that `bvh.cu` and cuBQL
-  call onto HIP. It declares the CUDA 12 runtime API, so cuBQL allocates with `hipMallocAsync`
-  instead of managed memory, which an AMD GPU running without XNACK cannot page in.
+- **cuBQL's HIP path:** `bvh.cu` is written against the CUDA runtime API. cuBQL maps those names
+  onto HIP and allocates with `hipMallocAsync` rather than managed memory, so XNACK is not needed.
+  This needs cuBQL with its HIP build path (NVIDIA/cuBQL#35), which the `external/cubql`
+  submodule includes. Older cuBQL versions miscompile the GPU builder under HIP, because their
+  float bit casts are reference casts compiled into device code.
 - **cuBQL:** `CUBQL_DISABLE_CUDA` is set, so cuBQL does not enable CUDA on its own when it finds
   nvcc. Its headers are compiled by ssdf's HIP sources.
 - **Floating point:** subnormals are kept (`-fno-gpu-flush-denormals-to-zero`), as nvcc keeps them
