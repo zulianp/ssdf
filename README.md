@@ -12,7 +12,7 @@
 - **OpenMP**: For shared memory parallelization (Avaialble)
 - **MPI**: For distributed memory parallelization (Available)
 - **CUDA**: For GPU acceleration (Rough integration with cuBQL)
-- **HIP**: For AMD GPU acceleration (TODO)
+- **HIP**: For AMD GPUs: the same device BVH, compiled with HIP (see [AMD GPUs (HIP)](#amd-gpus-hip))
 - **cuBQL**: For BVH datastructures, fastest implementation a.t.m. (https://github.com/NVIDIA/cuBQL.git)
 
 ### Building the Project
@@ -61,7 +61,47 @@
 - `SSDF_ENABLE_MPI`: Enable MPI support (default: OFF)
 - `SSDF_ENABLE_OPENMP`: Enable OpenMP support (default: OFF)
 - `SSDF_ENABLE_CUDA`: Enable CUDA support (default: OFF)
-- `SSDF_ENABLE_HIP`: Enable HIP support (default: OFF)
+- `SSDF_ENABLE_HIP`: Compile the device BVH with HIP instead of CUDA, for AMD GPUs; turns on `SSDF_ENABLE_CUDA` (default: OFF)
+- `SSDF_HIP_ARCHITECTURES`: AMD GPU architectures, used when `CMAKE_HIP_ARCHITECTURES` is not set (default: gfx942)
+- `SSDF_ENABLE_CUBIQL`: Use cuBQL for the BVH (default: ON)
+
+### AMD GPUs (HIP)
+
+The device BVH (`serial/bvh/bvh.cu`, built on cuBQL) is written against the CUDA runtime API and
+compiles with HIP. `SSDF_ENABLE_HIP=ON` compiles it with HIP instead of CUDA, together with
+cuBQL's GPU builder, which sorts with hipCUB. It also turns on `SSDF_ENABLE_CUDA`, the option for
+the device path, so it is the only option needed.
+
+Requirements: ROCm with HIP, hipCUB and rocPRIM, CMake 3.21 or newer (the first version with the
+HIP language), and the cuBQL submodule (`git submodule update --init external/cubql`).
+
+```bash
+cmake -S . -B build-hip -DCMAKE_BUILD_TYPE=Release \
+    -DSSDF_ENABLE_HIP=ON -DSSDF_ENABLE_CUBIQL=ON \
+    -DSSDF_HIP_ARCHITECTURES=gfx942 \
+    -DCMAKE_HIP_COMPILER=/path/to/rocm/clang++
+cmake --build build-hip -j 8
+```
+
+- **Architectures:** set `SSDF_HIP_ARCHITECTURES` to your GPU's architecture, for example `gfx942`
+  for MI300A/MI300X or `gfx90a` for MI250X; `rocminfo | grep gfx` prints it. A parent project's
+  `CMAKE_HIP_ARCHITECTURES` takes precedence.
+- **Compilers:** only the `.cu` files are compiled by the HIP compiler, ROCm's `clang++`. In a
+  standard ROCm install it is `$ROCM_PATH/llvm/bin/clang++`; module systems often put it
+  elsewhere, so check with `which clang++` after loading ROCm. The other sources are compiled by
+  the C++ compiler (for example GCC), and the library links `hip::host` publicly.
+- **cuBQL's HIP path:** `bvh.cu` is written against the CUDA runtime API. cuBQL maps those names
+  onto HIP and allocates with `hipMallocAsync` rather than managed memory, so XNACK is not needed.
+  This needs cuBQL with its HIP build path (NVIDIA/cuBQL#35), which the `external/cubql`
+  submodule includes. Older cuBQL versions miscompile the GPU builder under HIP, because their
+  float bit casts are reference casts compiled into device code.
+- **cuBQL:** `CUBQL_DISABLE_CUDA` is set, so cuBQL does not enable CUDA on its own when it finds
+  nvcc. Its headers are compiled by ssdf's HIP sources.
+- **Floating point:** subnormals are kept (`-fno-gpu-flush-denormals-to-zero`), as nvcc keeps them
+  by default.
+- **As a subproject:** set `SSDF_ENABLE_HIP` before `add_subdirectory`. If
+  the parent has already enabled the HIP language, ssdf uses its settings. SFEM does this with
+  `SFEM_ENABLE_HIP`.
 
 ### Using ssdf in Your CMake Project
 
