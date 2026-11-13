@@ -62,7 +62,39 @@ if(SSDF_ENABLE_OPENMP)
     list(APPEND SSDF_PUBLIC_DEP_LIBRARIES OpenMP::OpenMP_CXX)
 endif()
 
-if(SSDF_ENABLE_CUDA)
+if(SSDF_ENABLE_HIP AND NOT SSDF_ENABLE_CUDA)
+    message(FATAL_ERROR "SSDF_ENABLE_HIP=ON selects the backend of the device path, "
+                        "which SSDF_ENABLE_CUDA=ON turns on: set both.")
+endif()
+
+if(SSDF_ENABLE_HIP)
+    # The .cu sources are compiled as HIP (see CMakeLists.txt). The architectures must be set
+    # before enable_language.
+    if(NOT DEFINED CMAKE_HIP_ARCHITECTURES)
+        set(CMAKE_HIP_ARCHITECTURES "${SSDF_HIP_ARCHITECTURES}")
+    endif()
+    enable_language(HIP)
+    message(STATUS "HIP enabled for ${CMAKE_HIP_ARCHITECTURES}")
+    if(NOT DEFINED CMAKE_HIP_STANDARD)
+        set(CMAKE_HIP_STANDARD 17)
+        set(CMAKE_HIP_STANDARD_REQUIRED ON)
+    endif()
+    # Executables made of C++ sources are linked by the C++ compiler, as smesh's and SCCD's are.
+    set(CMAKE_HIP_LINKER_PREFERENCE_PROPAGATES OFF)
+    if(NOT TARGET hip::host)
+        find_package(hip REQUIRED)
+    endif()
+    # hipCUB (cuBQL's GPU builder sorts with it) is header-only and used by the .cu files only; its
+    # target is not linked, because through rocPRIM it brings hip::device, which compiles every C++
+    # source as HIP.
+    if(NOT TARGET hip::hipcub)
+        find_package(hipcub REQUIRED)
+    endif()
+    list(APPEND SSDF_PUBLIC_DEP_LIBRARIES hip::host)
+    # cuBQL enables CUDA whenever it finds nvcc; with HIP its headers are compiled by ssdf's HIP
+    # sources instead.
+    set(CUBQL_DISABLE_CUDA ON CACHE BOOL "" FORCE)
+elseif(SSDF_ENABLE_CUDA)
     enable_language(CUDA)
     message(STATUS "CUDA enabled")
     set(CMAKE_CUDA_STANDARD 17)
@@ -71,11 +103,6 @@ if(SSDF_ENABLE_CUDA)
     if(NOT CMAKE_CUDA_ARCHITECTURES)
         set(CMAKE_CUDA_ARCHITECTURES "native")
     endif()
-endif()
-
-if(SSDF_ENABLE_HIP)
-    enable_language(HIP)
-    message(STATUS "HIP enabled")
 endif()
 
 if(SSDF_ENABLE_CUBIQL)
