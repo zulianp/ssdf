@@ -1,5 +1,17 @@
 #include "bvh/bvh.hpp"
 
+#if defined(__HIP_PLATFORM_SPIRV__)
+// chipStar (HIP on SPIR-V, Intel GPUs) has no signed 64-bit atomicMin and atomicMax, which cuBQL's GPU
+// builder calls (builder/cuda/builder_common.h): CUDA's, relaxed at device scope.
+__device__ inline long long atomicMin(long long *const address, const long long value) {
+    return __hip_atomic_fetch_min(address, value, __ATOMIC_RELAXED, __HIP_MEMORY_SCOPE_AGENT);
+}
+
+__device__ inline long long atomicMax(long long *const address, const long long value) {
+    return __hip_atomic_fetch_max(address, value, __ATOMIC_RELAXED, __HIP_MEMORY_SCOPE_AGENT);
+}
+#endif
+
 #define CUBQL_GPU_BUILDER_IMPLEMENTATION 1
 #define CUBQL_TRIANGLE_CPAT_IMPLEMENTATION 1
 
@@ -90,7 +102,14 @@ namespace ssdf {
         CUBQL_CUDA_SYNC_CHECK();
 
         bvh3f d_bvh;
+#if defined(__HIP_PLATFORM_SPIRV__)
+        // chipStar (HIP on SPIR-V, Intel GPUs) implements no memory pools, which cuBQL's default
+        // allocator sets up under HIP: the BVH is built and freed with plain device allocations.
+        cuBQL::DeviceMemoryResource mem_resource;
+        cuBQL::gpuBuilder(d_bvh, d_boxes, nselements, cuBQL::BuildConfig(), 0, mem_resource);
+#else
         cuBQL::gpuBuilder(d_bvh, d_boxes, nselements, cuBQL::BuildConfig());
+#endif
 
         edf_bvh_cuda_queries_kernel<<<divRoundUp(npoints, ptrdiff_t(256)), 256>>>(
             d_bvh, d_triangles, npoints, d_x, d_y, d_z, d_out);
@@ -105,7 +124,11 @@ namespace ssdf {
         CUBQL_CUDA_CALL(Free(d_y));
         CUBQL_CUDA_CALL(Free(d_z));
         CUBQL_CUDA_CALL(Free(d_out));
+#if defined(__HIP_PLATFORM_SPIRV__)
+        cuBQL::cuda::free(d_bvh, 0, mem_resource);
+#else
         cuBQL::cuda::free(d_bvh);
+#endif
         return 0;
     }
 
