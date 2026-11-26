@@ -127,6 +127,9 @@ namespace ssdf {
 #if defined(__HIP_PLATFORM_SPIRV__)
         // chipStar (HIP on SPIR-V, Intel GPUs) implements no memory pools, which cuBQL's default
         // allocator sets up under HIP: the BVH is built and freed with plain device allocations.
+        // Each allocation then waits for the stream first, and each free for the device. chipStar's
+        // hipMallocAsync and hipFreeAsync are hipMalloc and that synchronous free too, so the stream
+        // waits are all this costs against the pooled path.
         cuBQL::DeviceMemoryResource mem_resource;
         cuBQL::gpuBuilder(d_bvh, d_boxes, nselements, cuBQL::BuildConfig(), 0, mem_resource);
 #else
