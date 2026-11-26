@@ -12,7 +12,7 @@
 - **OpenMP**: For shared memory parallelization (Avaialble)
 - **MPI**: For distributed memory parallelization (Available)
 - **CUDA**: For GPU acceleration (Rough integration with cuBQL)
-- **HIP**: For AMD GPUs: the same device BVH, compiled with HIP (see [AMD GPUs (HIP)](#amd-gpus-hip))
+- **HIP**: For AMD GPUs: the same device BVH, compiled with HIP (see [AMD GPUs (HIP)](#amd-gpus-hip)); also for Intel GPUs with chipStar (see [Intel GPUs (chipStar)](#intel-gpus-chipstar))
 - **cuBQL**: For BVH datastructures, fastest implementation a.t.m. (https://github.com/NVIDIA/cuBQL.git)
 
 ### Building the Project
@@ -61,8 +61,8 @@
 - `SSDF_ENABLE_MPI`: Enable MPI support (default: OFF)
 - `SSDF_ENABLE_OPENMP`: Enable OpenMP support (default: OFF)
 - `SSDF_ENABLE_CUDA`: Enable CUDA support (default: OFF)
-- `SSDF_ENABLE_HIP`: Compile the device BVH with HIP instead of CUDA, for AMD GPUs; turns on `SSDF_ENABLE_CUDA` (default: OFF)
-- `SSDF_HIP_ARCHITECTURES`: AMD GPU architectures, used when `CMAKE_HIP_ARCHITECTURES` is not set (default: gfx942)
+- `SSDF_ENABLE_HIP`: Compile the device BVH with HIP instead of CUDA, for AMD GPUs or for Intel GPUs with chipStar; turns on `SSDF_ENABLE_CUDA` (default: OFF)
+- `SSDF_HIP_ARCHITECTURES`: AMD GPU architectures, used when `CMAKE_HIP_ARCHITECTURES` is not set; unused with chipStar (default: gfx942)
 - `SSDF_ENABLE_CUBIQL`: Use cuBQL for the BVH (default: ON)
 
 ### AMD GPUs (HIP)
@@ -102,6 +102,27 @@ cmake --build build-hip -j 8
 - **As a subproject:** set `SSDF_ENABLE_HIP` before `add_subdirectory`. If
   the parent has already enabled the HIP language, ssdf uses its settings. SFEM does this with
   `SFEM_ENABLE_HIP`.
+
+### Intel GPUs (chipStar)
+
+chipStar compiles HIP to SPIR-V for Intel GPUs (for example Aurora's PVC). The same
+`SSDF_ENABLE_HIP=ON` build applies, with the platform given:
+
+```bash
+cmake -S . -B build-chipstar -DCMAKE_BUILD_TYPE=Release \
+    -DSSDF_ENABLE_HIP=ON -DSSDF_ENABLE_CUBIQL=ON \
+    -DCMAKE_HIP_PLATFORM=spirv
+```
+
+- **Platform:** `CMAKE_HIP_PLATFORM=spirv` needs CMake 4.3 or newer. If it is not given and
+  `HIP_PLATFORM` or `hipconfig --platform` reports `spirv`, the configure stops and asks for it:
+  the platform is needed before the HIP language is enabled, and the AMD architectures
+  (`SSDF_HIP_ARCHITECTURES`) would otherwise be set. No architectures are set: SPIR-V is one
+  portable binary.
+- **Requirements:** chipStar with its ports of hipCUB and rocPRIM.
+- **cuBQL:** chipStar has no memory pools, so the BVH is built with plain device allocations
+  (`cuBQL::DeviceMemoryResource`), and it has no signed 64-bit `atomicMin`/`atomicMax`, which
+  `bvh.cu` defines for cuBQL's builder as compare-and-swap loops.
 
 ### Using ssdf in Your CMake Project
 

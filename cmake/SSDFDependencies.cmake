@@ -63,13 +63,52 @@ if(SSDF_ENABLE_OPENMP)
 endif()
 
 if(SSDF_ENABLE_HIP)
+    # The platform as given (enable_language may detect it later, below).
+    set(_ssdf_hip_platform_given "${CMAKE_HIP_PLATFORM}")
+    if(NOT CMAKE_HIP_PLATFORM)
+        # Not given: enable_language takes it from `hipconfig --platform` (CMake's
+        # CMakeDetermineHIPCompiler.cmake), which follows the HIP_PLATFORM environment variable and
+        # on chipStar reports spirv. Checked before the AMD architectures below are set, on which
+        # CMake's own compiler test would fail first.
+        set(_ssdf_hip_platform "$ENV{HIP_PLATFORM}")
+        if(NOT _ssdf_hip_platform)
+            execute_process(COMMAND hipconfig --platform
+                OUTPUT_VARIABLE _ssdf_hipconfig_platform OUTPUT_STRIP_TRAILING_WHITESPACE
+                RESULT_VARIABLE _ssdf_hipconfig_result
+                ERROR_QUIET)
+            if(_ssdf_hipconfig_result EQUAL 0)
+                set(_ssdf_hip_platform "${_ssdf_hipconfig_platform}")
+            endif()
+        endif()
+        if(_ssdf_hip_platform STREQUAL "spirv")
+            message(FATAL_ERROR "The HIP installation is chipStar's (HIP_PLATFORM or hipconfig --platform: spirv), but "
+                                "the platform was not given: configure with -DCMAKE_HIP_PLATFORM=spirv")
+        endif()
+    endif()
     # The .cu sources are compiled as HIP (see CMakeLists.txt). The architectures must be set
     # before enable_language.
-    if(NOT DEFINED CMAKE_HIP_ARCHITECTURES)
+    if(CMAKE_HIP_PLATFORM STREQUAL "spirv")
+        # chipStar (Intel GPUs, e.g. Aurora's PVC): HIP compiled to SPIR-V, with no architecture list.
+        # CMake knows this platform from 4.3.
+        if(CMAKE_VERSION VERSION_LESS 4.3)
+            message(FATAL_ERROR "CMAKE_HIP_PLATFORM=spirv (chipStar) needs CMake 4.3 or later; this is ${CMAKE_VERSION}")
+        endif()
+    elseif(NOT DEFINED CMAKE_HIP_ARCHITECTURES)
         set(CMAKE_HIP_ARCHITECTURES "${SSDF_HIP_ARCHITECTURES}")
     endif()
     enable_language(HIP)
-    message(STATUS "HIP enabled for ${CMAKE_HIP_ARCHITECTURES}")
+    if(CMAKE_HIP_PLATFORM STREQUAL "spirv" AND NOT _ssdf_hip_platform_given STREQUAL "spirv")
+        # CMake detected spirv after SSDF_HIP_ARCHITECTURES (gfx...) was set above: the two do not
+        # mix. The check above catches this first; this one stays for a CMake that detects the
+        # platform by other means.
+        message(FATAL_ERROR "The HIP compiler is chipStar's (CMAKE_HIP_PLATFORM detected as spirv), but the "
+                            "platform was not given: configure a new build directory with -DCMAKE_HIP_PLATFORM=spirv")
+    endif()
+    if(CMAKE_HIP_PLATFORM STREQUAL "spirv")
+        message(STATUS "HIP enabled for SPIR-V (chipStar)")
+    else()
+        message(STATUS "HIP enabled for ${CMAKE_HIP_PLATFORM}: ${CMAKE_HIP_ARCHITECTURES}")
+    endif()
     if(NOT DEFINED CMAKE_HIP_STANDARD)
         set(CMAKE_HIP_STANDARD 17)
         set(CMAKE_HIP_STANDARD_REQUIRED ON)

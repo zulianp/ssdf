@@ -1,5 +1,39 @@
 #include "bvh/bvh.hpp"
 
+#if defined(__HIP_PLATFORM_SPIRV__)
+// chipStar (HIP on SPIR-V, Intel GPUs) has no signed 64-bit atomicMin and atomicMax, which cuBQL's GPU
+// builder names (builder/cuda/builder_common.h; a float BVH such as bvh3f uses the 32-bit ones only).
+// CUDA's, as compare-and-swap loops on chipStar's 64-bit atomicCAS (relaxed, device scope, as CUDA's):
+// these need 64-bit base atomics only, not the extended ones (cl_khr_int64_extended_atomics) a native
+// 64-bit min/max lowers to. cuBQL calls them unqualified, so they stay global; as templates, a
+// chipStar release that declares these overloads takes precedence instead of colliding with them.
+template <int = 0>
+__device__ inline long long atomicMin(long long *const address, const long long value) {
+    unsigned long long *const bits = (unsigned long long *)address;
+    unsigned long long old = *bits;
+    unsigned long long assumed;
+    do {
+        assumed = old;
+        if ((long long)assumed <= value) break;
+        old = atomicCAS(bits, assumed, (unsigned long long)value);
+    } while (old != assumed);
+    return (long long)old;
+}
+
+template <int = 0>
+__device__ inline long long atomicMax(long long *const address, const long long value) {
+    unsigned long long *const bits = (unsigned long long *)address;
+    unsigned long long old = *bits;
+    unsigned long long assumed;
+    do {
+        assumed = old;
+        if ((long long)assumed >= value) break;
+        old = atomicCAS(bits, assumed, (unsigned long long)value);
+    } while (old != assumed);
+    return (long long)old;
+}
+#endif
+
 #define CUBQL_GPU_BUILDER_IMPLEMENTATION 1
 #define CUBQL_TRIANGLE_CPAT_IMPLEMENTATION 1
 
@@ -90,7 +124,17 @@ namespace ssdf {
         CUBQL_CUDA_SYNC_CHECK();
 
         bvh3f d_bvh;
+#if defined(__HIP_PLATFORM_SPIRV__)
+        // chipStar (HIP on SPIR-V, Intel GPUs) implements no memory pools, which cuBQL's default
+        // allocator sets up under HIP: the BVH is built and freed with plain device allocations.
+        // Each allocation then waits for the stream first, and each free for the device. chipStar's
+        // hipMallocAsync and hipFreeAsync are hipMalloc and that synchronous free too, so the stream
+        // waits are all this costs against the pooled path.
+        cuBQL::DeviceMemoryResource mem_resource;
+        cuBQL::gpuBuilder(d_bvh, d_boxes, nselements, cuBQL::BuildConfig(), 0, mem_resource);
+#else
         cuBQL::gpuBuilder(d_bvh, d_boxes, nselements, cuBQL::BuildConfig());
+#endif
 
         edf_bvh_cuda_queries_kernel<<<divRoundUp(npoints, ptrdiff_t(256)), 256>>>(
             d_bvh, d_triangles, npoints, d_x, d_y, d_z, d_out);
@@ -105,7 +149,11 @@ namespace ssdf {
         CUBQL_CUDA_CALL(Free(d_y));
         CUBQL_CUDA_CALL(Free(d_z));
         CUBQL_CUDA_CALL(Free(d_out));
+#if defined(__HIP_PLATFORM_SPIRV__)
+        cuBQL::cuda::free(d_bvh, 0, mem_resource);
+#else
         cuBQL::cuda::free(d_bvh);
+#endif
         return 0;
     }
 

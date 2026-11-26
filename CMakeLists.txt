@@ -150,10 +150,15 @@ set_target_properties(ssdf PROPERTIES
 )
 
 if(SSDF_ENABLE_HIP)
-    # hipCUB and rocPRIM headers, for the .cu files only (see SSDFDependencies.cmake).
+    # hipCUB and rocPRIM headers, for the .cu files only (see SSDFDependencies.cmake). hipCUB's
+    # package brings roc::rocprim only when hipCUB was built for a clang HIP compiler (its config
+    # then finds rocPRIM); otherwise rocPRIM's headers must be on hipCUB's include path, as they
+    # are when both are installed in one prefix.
     foreach(_ssdf_hip_hdr_target hip::hipcub roc::rocprim)
-        target_include_directories(ssdf PRIVATE
-            "$<$<COMPILE_LANGUAGE:HIP>:$<TARGET_PROPERTY:${_ssdf_hip_hdr_target},INTERFACE_INCLUDE_DIRECTORIES>>")
+        if(TARGET ${_ssdf_hip_hdr_target})
+            target_include_directories(ssdf PRIVATE
+                "$<$<COMPILE_LANGUAGE:HIP>:$<TARGET_PROPERTY:${_ssdf_hip_hdr_target},INTERFACE_INCLUDE_DIRECTORIES>>")
+        endif()
     endforeach()
     # Subnormals are kept, as nvcc keeps them by default.
     target_compile_options(ssdf PRIVATE "$<$<COMPILE_LANGUAGE:HIP>:-fno-gpu-flush-denormals-to-zero>")
