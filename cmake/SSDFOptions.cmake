@@ -10,10 +10,11 @@ option(BUILD_SHARED_LIBS "Build shared library" ON)
 option(SSDF_ENABLE_MPI "Enable MPI support" OFF)
 option(SSDF_ENABLE_OPENMP "Enable OpenMP support" OFF)
 option(SSDF_ENABLE_CUDA "Enable CUDA support" OFF)
-# SSDF_ENABLE_HIP=ON compiles the device sources with HIP instead of CUDA, for AMD GPUs. The device
-# path is what SSDF_ENABLE_CUDA turns on, so HIP turns it on too. gfx942 is MI300A.
-option(SSDF_ENABLE_HIP "Build the device path with HIP, for AMD GPUs" OFF)
-set(SSDF_HIP_ARCHITECTURES "gfx942" CACHE STRING "HIP (AMD GPU) architectures to build for")
+# SSDF_ENABLE_HIP=ON compiles the device sources with HIP instead of CUDA, for AMD GPUs, or for Intel
+# GPUs with chipStar (CMAKE_HIP_PLATFORM=spirv). The device path is what SSDF_ENABLE_CUDA turns on, so
+# HIP turns it on too. gfx942 is MI300A; chipStar takes no architectures.
+option(SSDF_ENABLE_HIP "Build the device path with HIP, for AMD GPUs or chipStar (Intel GPUs)" OFF)
+set(SSDF_HIP_ARCHITECTURES "gfx942" CACHE STRING "HIP (AMD GPU) architectures to build for; unused with chipStar")
 if(SSDF_ENABLE_HIP AND NOT SSDF_ENABLE_CUDA)
     message(STATUS "SSDF_ENABLE_HIP=ON turns on SSDF_ENABLE_CUDA (the device path)")
     set(SSDF_ENABLE_CUDA ON CACHE BOOL "Enable CUDA support" FORCE)
