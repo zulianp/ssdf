@@ -2,13 +2,35 @@
 
 #if defined(__HIP_PLATFORM_SPIRV__)
 // chipStar (HIP on SPIR-V, Intel GPUs) has no signed 64-bit atomicMin and atomicMax, which cuBQL's GPU
-// builder calls (builder/cuda/builder_common.h): CUDA's, relaxed at device scope.
+// builder names (builder/cuda/builder_common.h; a float BVH such as bvh3f uses the 32-bit ones only).
+// CUDA's, as compare-and-swap loops on chipStar's 64-bit atomicCAS (relaxed, device scope, as CUDA's):
+// these need 64-bit base atomics only, not the extended ones (cl_khr_int64_extended_atomics) a native
+// 64-bit min/max lowers to. cuBQL calls them unqualified, so they stay global; as templates, a
+// chipStar release that declares these overloads takes precedence instead of colliding with them.
+template <int = 0>
 __device__ inline long long atomicMin(long long *const address, const long long value) {
-    return __hip_atomic_fetch_min(address, value, __ATOMIC_RELAXED, __HIP_MEMORY_SCOPE_AGENT);
+    unsigned long long *const bits = (unsigned long long *)address;
+    unsigned long long old = *bits;
+    unsigned long long assumed;
+    do {
+        assumed = old;
+        if ((long long)assumed <= value) break;
+        old = atomicCAS(bits, assumed, (unsigned long long)value);
+    } while (old != assumed);
+    return (long long)old;
 }
 
+template <int = 0>
 __device__ inline long long atomicMax(long long *const address, const long long value) {
-    return __hip_atomic_fetch_max(address, value, __ATOMIC_RELAXED, __HIP_MEMORY_SCOPE_AGENT);
+    unsigned long long *const bits = (unsigned long long *)address;
+    unsigned long long old = *bits;
+    unsigned long long assumed;
+    do {
+        assumed = old;
+        if ((long long)assumed >= value) break;
+        old = atomicCAS(bits, assumed, (unsigned long long)value);
+    } while (old != assumed);
+    return (long long)old;
 }
 #endif
 
